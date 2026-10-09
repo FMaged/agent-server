@@ -1,0 +1,14 @@
+ansible_user: agent
+ansible_become: true
+ansible_ssh_private_key_file: ~/.ssh/agent-server
+
+# Written whole to authorized_keys, so dropping a key here removes it from the host.
+agent_ssh_public_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIXmv+F9H41hrVP+cZGGgIaz7R7nltqySrdC+CrapVT6 agent-server"
+
+base_packages:
+  - ca-certificates
+  - curl
+  - git
+  - rsync
+  - vim
