@@ -1,0 +1,41 @@
+---
+# A string here, or an empty list, writes an authorized_keys nobody can log in
+# with — and no password exists to fall back on.
+- name: Check the public key list is a non-empty list
+  ansible.builtin.assert:
+    that:
+      - agent_ssh_public_keys is sequence
+      - agent_ssh_public_keys is not string
+      - agent_ssh_public_keys | length > 0
+    fail_msg: agent_ssh_public_keys must be a non-empty list of key strings.
+
+- name: Keep the agent user's .ssh directory private
+  ansible.builtin.file:
+    path: /home/agent/.ssh
+    state: directory
+    owner: agent
+    group: agent
+    mode: "0700"
+
+- name: Write the agent user's authorized_keys
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible. A key dropped from the list is dropped from here.
+      {% for key in agent_ssh_public_keys %}
+      {{ key }}
+      {% endfor %}
+    dest: /home/agent/.ssh/authorized_keys
+    owner: agent
+    group: agent
+    mode: "0600"
+
+- name: Grant the agent user passwordless sudo
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible.
+      agent ALL=(ALL) NOPASSWD:ALL
+    dest: /etc/sudoers.d/90-agent-nopasswd
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
