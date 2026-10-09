@@ -1,6 +1,6 @@
 ---
 # A string here, or an empty list, writes an authorized_keys nobody can log in
-# with — and no password exists to fall back on.
+# with — and sshd refuses passwords, so there is no fallback.
 - name: Check the public key list is a non-empty list
   ansible.builtin.assert:
     that:
@@ -28,6 +28,13 @@
     owner: agent
     group: agent
     mode: "0600"
+
+# The install-time password ships in the preseed, so it is public. Replacing it
+# with an invalid hash ends it, and leaves the key as the only credential.
+- name: Remove the install-time password
+  ansible.builtin.user:
+    name: agent
+    password: "*"
 
 - name: Grant the agent user passwordless sudo
   ansible.builtin.copy:

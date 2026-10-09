@@ -44,9 +44,11 @@ The host comes up on `192.168.1.50` as `agent`:
 ssh agent@192.168.1.50
 ```
 
-`sudo` works without a password, which is the only route to root: no password
-exists on the account and root is locked. The playbook in `ansible/` takes
-ownership of that drop-in on its first run.
+`sudo` works without a password, which is the only route to root, and root
+itself is locked. The account has the console password set in `preseed.cfg` —
+usable at the keyboard only, since sshd refuses passwords. Running the playbook
+in `ansible/` removes that password and takes ownership of the sudo drop-in, so
+log in at the console *before* the first playbook run if you need to.
 
 A reinstall gives the host a new SSH host key, which SSH refuses as a mismatch.
 Drop the stale entry with `ssh-keygen -R 192.168.1.50`.

@@ -46,5 +46,6 @@ nothing.
 - `ansible/` — `site.yml` and the `users`, `base` and `ssh` roles; values live
   in `group_vars/agent_servers.yml`
 
-The host comes up on `192.168.1.50` as `agent`, with passwordless sudo, no
-password on the account and root locked. Whoever holds the SSH key holds root.
+The host comes up on `192.168.1.50` as `agent`, with passwordless sudo, a
+console password and root locked. The first playbook run removes that console
+password. SSH is key-only, so whoever holds the SSH key holds root.
