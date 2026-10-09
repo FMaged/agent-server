@@ -1,0 +1,14 @@
+---
+- name: Harden sshd
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible.
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PubkeyAuthentication yes
+    dest: /etc/ssh/sshd_config.d/20-agent-server.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd
