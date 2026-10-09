@@ -6,9 +6,10 @@ accepts your SSH key.
 
 ## Before you start
 
-Replace `PASTE_YOUR_SSH_PUBLIC_KEY_HERE` in `preseed.cfg` with your SSH public
-key. It is the only credential the host will have: no password is set and root
-is locked.
+`preseed.cfg` carries the public half of the `agent-server` keypair, and the
+private half has to be on the machine you will run Ansible from. To use a
+different key, replace the one on the `authorized_keys` line. It is the only
+credential the host will have: no password is set and root is locked.
 
 Check that `partman-auto/disk` names the target machine's disk. It is set to
 `/dev/sda`; an NVMe SSD is usually `/dev/nvme0n1`. That disk is erased whole.
