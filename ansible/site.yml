@@ -1,0 +1,8 @@
+---
+# users comes first: it owns the sudo drop-in the other two roles become with.
+- name: Configure agent-server
+  hosts: agent_servers
+  roles:
+    - users
+    - base
+    - ssh
