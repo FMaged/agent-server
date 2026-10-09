@@ -44,8 +44,9 @@ The host comes up on `192.168.1.50` as `agent`:
 ssh agent@192.168.1.50
 ```
 
-`sudo` does not work yet. No password exists, and the sudoers drop-in comes
-from the playbook in `ansible/`.
+`sudo` works without a password, which is the only route to root: no password
+exists on the account and root is locked. The playbook in `ansible/` takes
+ownership of that drop-in on its first run.
 
 A reinstall gives the host a new SSH host key, which SSH refuses as a mismatch.
 Drop the stale entry with `ssh-keygen -R 192.168.1.50`.
