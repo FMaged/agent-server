@@ -1,0 +1,34 @@
+---
+- name: Set the system timezone
+  community.general.timezone:
+    name: "{{ base_timezone }}"
+
+- name: Install the base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: present
+    update_cache: true
+
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+
+# The package generates this file from a debconf answer, so owning it pins the
+# behaviour rather than inheriting whichever default applied at install time.
+- name: Turn on the periodic security upgrades
+  ansible.builtin.copy:
+    content: |
+      // Managed by Ansible.
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable the daily upgrade timer
+  ansible.builtin.systemd_service:
+    name: apt-daily-upgrade.timer
+    enabled: true
+    state: started

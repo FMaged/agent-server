@@ -6,6 +6,8 @@ ansible_ssh_private_key_file: ~/.ssh/agent-server
 agent_ssh_public_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIXmv+F9H41hrVP+cZGGgIaz7R7nltqySrdC+CrapVT6 agent-server"
 
+base_timezone: Europe/Berlin
+
 base_packages:
   - ca-certificates
   - curl
