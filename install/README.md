@@ -5,35 +5,46 @@ the install runs start to finish without a prompt and reboots into a plain
 Debian with SSH, `sudo` and Python. It configures nothing else: keys, sshd and
 sudo are set by the playbook in `ansible/`.
 
+`build-iso.sh` puts the preseed into the netinst's initrd, where the installer
+reads it before its first question, the network included.
+
 ## Before you start
 
 The only login is `ansible` with the password hash in `preseed.cfg`. Root is
-locked. Replace the hash if you do not know its password.
+locked. Replace the hash if you do not know its password. The ISO carries that
+hash, so do not publish it.
 
 Check that `partman-auto/disk` names the target machine's disk. It is set to
 `/dev/sda`; an NVMe SSD is usually `/dev/nvme0n1`. That disk is erased whole.
 
-## Serve it
+## Build the ISO
 
-From the repository root:
-
-```
-python3 -m http.server 8000 --directory install/
-```
-
-## Boot the installer
-
-Boot the Debian 13 netinst image **in UEFI mode**, with CSM off, and add to the
-installer's boot line:
+Needs `xorriso`, `cpio` and `gzip`. Download the netinst and its `SHA256SUMS`
+into the same directory from
+`https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/`, then:
 
 ```
-auto=true priority=critical preseed/url=http://<workstation-ip>:8000/preseed.cfg
+install/build-iso.sh ~/Downloads/debian-13.7.0-amd64-netinst.iso
 ```
 
-Use the workstation's LAN address — the installer fetches the file over the
-network, so `localhost` is its own loopback. UEFI is not optional: the
-partition recipe is chosen from the firmware mode the installer booted in, and
-a BIOS/CSM install lays out a disk that UEFI firmware then refuses to boot.
+This writes `install/build/agent-server.iso`. Rebuild after every change to
+`preseed.cfg`. Write it to a USB stick (all data on the stick is lost):
+
+```
+sudo dd if=install/build/agent-server.iso of=/dev/sdX bs=4M conv=fsync status=progress
+```
+
+## Boot it
+
+Boot the stick **in UEFI mode**, with CSM off, from the firmware's one-time boot
+menu. After 5 seconds the installer starts on its own and erases the disk. The
+partition layout depends on UEFI; a BIOS/CSM boot is not supported.
+
+Use the one-time menu, not the boot order: the installer reboots when done, and
+a stick that boots first again starts the install again.
+
+The installer still needs the network: it downloads packages from
+`deb.debian.org`.
 
 ## After it reboots
 
