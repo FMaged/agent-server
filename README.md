@@ -41,7 +41,14 @@ cd ansible
 ansible-playbook site.yml -k -K -e ansible_user=devel
 ```
 
-Later runs connect on the key and need no flags. A second run changes nothing.
+`ansible` does not exist yet, so this run logs in as `devel` and creates it.
+Every later run drops the flags and connects as `ansible` on the key:
+
+```
+ansible-playbook site.yml
+```
+
+A second run changes nothing.
 
 ## Layout
 
