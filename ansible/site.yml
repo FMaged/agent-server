@@ -1,5 +1,5 @@
 ---
-# users comes first: it owns the sudo drop-in the other two roles become with.
+# users comes first: ansible needs its key and sudo before ssh turns passwords off.
 - name: Configure agent-server
   hosts: agent_servers
   roles:

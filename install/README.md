@@ -10,9 +10,9 @@ reads it before its first question, the network included.
 
 ## Before you start
 
-The only login is `ansible`, with the bootstrap password you type when you
-build the ISO. Root is locked. The hash is in the ISO only, never in the repo,
-so do not publish the ISO.
+The only login is `devel`, with the password you type when you build the ISO.
+Root is locked. The hash is in the ISO only, never in the repo, so keep the ISO
+private.
 
 Check that `partman-auto/disk` names the target machine's disk. It is set to
 `/dev/sda`; an NVMe SSD is usually `/dev/nvme0n1`. That disk is erased whole.
@@ -27,7 +27,7 @@ into the same directory from
 install/build-iso.sh ~/Downloads/debian-13.7.0-amd64-netinst.iso
 ```
 
-It asks for the bootstrap password twice, then writes
+It asks for `devel`'s password twice, then writes
 `install/build/agent-server.iso`. Rebuild after every change to `preseed.cfg`
 or to the password. Write it to a USB stick (all data on the stick is lost):
 
@@ -52,12 +52,12 @@ The installer still needs the network: it downloads packages from
 
 ## After it reboots
 
-The host comes up on `192.168.150.221` as `ansible`. Run the playbook once with
-the bootstrap password; it installs your key, closes password login and
-removes the password:
+The host comes up on `192.168.150.221` with `devel`. Run the playbook once as
+`devel`, with its password; it creates `ansible`, installs your key and closes
+password login:
 
 ```
-cd ansible && ansible-playbook site.yml -k -K
+cd ansible && ansible-playbook site.yml -k -K -e ansible_user=devel
 ```
 
 A reinstall gives the host a new SSH host key, which SSH refuses as a mismatch.

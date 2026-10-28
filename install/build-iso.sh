@@ -13,7 +13,7 @@ done
 # Debian's SHA256SUMS must sit next to the ISO.
 (cd "$(dirname "$iso")" && grep " $(basename "$iso")\$" SHA256SUMS | sha256sum -c --quiet)
 
-# Prompts twice; the hash goes only into the ISO.
+# devel's password, asked twice; the hash goes only into the ISO.
 hash=$(openssl passwd -6)
 
 work=$(mktemp -d)

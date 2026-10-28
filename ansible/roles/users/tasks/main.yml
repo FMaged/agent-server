@@ -1,5 +1,5 @@
 ---
-# Without this key on the host, locking the password below locks us out.
+# Once password SSH is off, this key is the only way in.
 - name: Check the controller's key is in the list
   ansible.builtin.assert:
     that: controller_key in agent_ssh_public_keys | join(' ') | split
@@ -7,83 +7,41 @@
   vars:
     controller_key: "{{ lookup('pipe', 'ssh-keygen -y -f ' ~ ansible_ssh_private_key_file).split()[1] }}"
 
-- name: Keep the ansible user's .ssh directory private
-  ansible.builtin.file:
-    path: /home/{{ ansible_user }}/.ssh
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0700"
+- name: Create the ansible user
+  ansible.builtin.user:
+    name: ansible
+    shell: /bin/bash
+    create_home: true
 
-- name: Write the ansible user's authorized_keys
+- name: Keep the .ssh directories private
+  ansible.builtin.file:
+    path: /home/{{ item }}/.ssh
+    state: directory
+    owner: "{{ item }}"
+    group: "{{ item }}"
+    mode: "0700"
+  loop: [ansible, devel]
+
+- name: Write the authorized_keys
   ansible.builtin.copy:
     content: |
       # Managed by Ansible. A key dropped from the list is dropped from here.
       {% for key in agent_ssh_public_keys %}
       {{ key }}
       {% endfor %}
-    dest: /home/{{ ansible_user }}/.ssh/authorized_keys
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    dest: /home/{{ item }}/.ssh/authorized_keys
+    owner: "{{ item }}"
+    group: "{{ item }}"
     mode: "0600"
+  loop: [ansible, devel]
 
 - name: Grant the ansible user passwordless sudo
   ansible.builtin.copy:
     content: |
       # Managed by Ansible.
-      {{ ansible_user }} ALL=(ALL) NOPASSWD:ALL
+      ansible ALL=(ALL) NOPASSWD:ALL
     dest: /etc/sudoers.d/ansible
     owner: root
     group: root
     mode: "0440"
     validate: /usr/sbin/visudo -cf %s
-
-# The bootstrap password is public; `*` ends it.
-- name: Remove the install-time password
-  ansible.builtin.user:
-    name: "{{ ansible_user }}"
-    password: "*"
-
-- name: Look up devel's password
-  ansible.builtin.getent:
-    database: shadow
-    key: devel
-    fail_key: false
-
-# Asks only while devel is missing or locked, so a set password is never reset.
-- name: Ask for devel's password
-  ansible.builtin.pause:
-    prompt: Password for devel
-    echo: false
-  register: users_devel_password
-  when: ansible_facts.getent_shadow.devel is none or ansible_facts.getent_shadow.devel[0] is match('[!*]')
-
-- name: Create the devel user
-  ansible.builtin.user:
-    name: devel
-    groups: sudo
-    append: true
-    shell: /bin/bash
-    create_home: true
-    password: "{{ users_devel_password.user_input | password_hash('sha512') if users_devel_password.user_input | default('') else omit }}"
-  no_log: true
-
-- name: Keep devel's .ssh directory private
-  ansible.builtin.file:
-    path: /home/devel/.ssh
-    state: directory
-    owner: devel
-    group: devel
-    mode: "0700"
-
-- name: Write devel's authorized_keys
-  ansible.builtin.copy:
-    content: |
-      # Managed by Ansible. A key dropped from the list is dropped from here.
-      {% for key in agent_ssh_public_keys %}
-      {{ key }}
-      {% endfor %}
-    dest: /home/devel/.ssh/authorized_keys
-    owner: devel
-    group: devel
-    mode: "0600"

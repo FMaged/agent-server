@@ -16,7 +16,7 @@ install, then an Ansible run that configures the base system.
 ## Install
 
 Build an ISO with the preseed inside it, from the netinst and its `SHA256SUMS`.
-It asks for the bootstrap password, which only the ISO carries:
+It asks for `devel`'s password, which only the ISO carries, so keep the ISO private:
 
 ```
 install/build-iso.sh ~/Downloads/debian-13.7.0-amd64-netinst.iso
@@ -34,11 +34,11 @@ preseed, and it is erased whole.
 
 ## Configure
 
-Once the machine has rebooted, run it once with the bootstrap password:
+Once the machine has rebooted, run it once as `devel`, with its password:
 
 ```
 cd ansible
-ansible-playbook site.yml -k -K
+ansible-playbook site.yml -k -K -e ansible_user=devel
 ```
 
 Later runs connect on the key and need no flags. A second run changes nothing.
@@ -50,11 +50,9 @@ Later runs connect on the key and need no flags. A second run changes nothing.
 - `ansible/` — `site.yml` and the `users`, `base` and `ssh` roles; values live
   in `group_vars/agent_servers.yml`
 
-The host comes up on `192.168.150.221` as `ansible`, with a bootstrap password
-and root locked. The first playbook run installs the key, removes the password
-and turns off password login. After that SSH is key-only, so whoever holds the
-SSH key holds root.
-
-The playbook also creates `devel`, a human user in the `sudo` group with the
-same keys. The run that creates it asks for its password, which `sudo` and the
-keyboard login then use; later runs do not ask and leave it unchanged.
+The host comes up on `192.168.150.221` with one user, `devel`, in the `sudo`
+group with the password typed at the ISO build, and root locked. The first
+playbook run creates `ansible` with passwordless sudo and no password, gives
+both users the key, and turns off password login. After that SSH is key-only,
+so whoever holds the SSH key holds root; `devel`'s password works at the
+keyboard and for its `sudo`.
