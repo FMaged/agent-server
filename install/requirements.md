@@ -23,7 +23,7 @@ beyond the packages listed below.
 |----|-------------|
 | IR-01 | Fully unattended; no prompts. Boot in UEFI mode. |
 | IR-02 | Debian 13 `trixie` from `deb.debian.org`, with `main` and `non-free-firmware`, plus `trixie-updates` and `trixie-security`. |
-| IR-03 | `en_US.UTF-8`, US keyboard, `Europe/Berlin`, hardware clock in UTC, NTP. |
+| IR-03 | `en_US.UTF-8`, German (`de`) keyboard, `Europe/Berlin`, hardware clock in UTC, NTP. |
 | IR-04 | Static IPv4 `192.168.150.221/24`, gateway and DNS `192.168.150.1`, hostname `agent-server`, no domain. No DHCP. |
 | IR-05 | Install to one explicit disk (`partman-auto/disk`). Existing LVM/RAID on it is discarded. |
 | IR-06 | Layout: EFI 1 GB (FAT32), swap 8 GB, ext4 `/` on the rest. |
