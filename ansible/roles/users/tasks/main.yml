@@ -44,7 +44,20 @@
     name: "{{ ansible_user }}"
     password: "*"
 
-# No password here: it is set once by hand with passwd, and re-runs leave it.
+- name: Look up devel's password
+  ansible.builtin.getent:
+    database: shadow
+    key: devel
+    fail_key: false
+
+# Asks only while devel is missing or locked, so a set password is never reset.
+- name: Ask for devel's password
+  ansible.builtin.pause:
+    prompt: Password for devel
+    echo: false
+  register: users_devel_password
+  when: ansible_facts.getent_shadow.devel is none or ansible_facts.getent_shadow.devel[0] is match('[!*]')
+
 - name: Create the devel user
   ansible.builtin.user:
     name: devel
@@ -52,6 +65,8 @@
     append: true
     shell: /bin/bash
     create_home: true
+    password: "{{ users_devel_password.user_input | password_hash('sha512') if users_devel_password.user_input | default('') else omit }}"
+  no_log: true
 
 - name: Keep devel's .ssh directory private
   ansible.builtin.file:

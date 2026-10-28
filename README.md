@@ -56,6 +56,5 @@ and turns off password login. After that SSH is key-only, so whoever holds the
 SSH key holds root.
 
 The playbook also creates `devel`, a human user in the `sudo` group with the
-same keys. Its password is set by hand on the machine, once, with
-`sudo passwd devel`; the keyboard login only works after that, and `sudo` asks
-for that password.
+same keys. The run that creates it asks for its password, which `sudo` and the
+keyboard login then use; later runs do not ask and leave it unchanged.
