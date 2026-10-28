@@ -9,7 +9,7 @@ install, then an Ansible run that configures the base system.
 - The Debian 13 amd64 netinst image and its `SHA256SUMS`, a USB stick, and a
   machine whose firmware boots it in UEFI mode
 - `xorriso`, `cpio` and `gzip`, to build the ISO
-- Ansible; `ansible-core` is enough
+- Ansible; `ansible-core` 2.14 or later is enough
 - `sshpass` on the controller, for the first run's `-k`
 - The private key at `~/.ssh/agent-server`
 
@@ -21,10 +21,15 @@ Build an ISO with the preseed inside it, from the netinst and its `SHA256SUMS`:
 install/build-iso.sh ~/Downloads/debian-13.7.0-amd64-netinst.iso
 ```
 
-Write `install/build/agent-server.iso` to a USB stick and boot it once, in UEFI
-mode, from the one-time boot menu. Nothing to answer or type. Read
-`install/README.md` first: the bootstrap password and the target disk are both
-set in the preseed, and the disk is erased whole.
+Write it to the one USB stick plugged in, after typing `yes`:
+
+```
+install/flash-usb.sh
+```
+
+Boot the stick once, in UEFI mode, from the one-time boot menu. Nothing to
+answer or type. Read `install/README.md` first: the bootstrap password and the
+target disk are both set in the preseed, and the disk is erased whole.
 
 ## Configure
 
@@ -39,7 +44,8 @@ Later runs connect on the key and need no flags. A second run changes nothing.
 
 ## Layout
 
-- `install/` — the preseed and the script that builds it into the ISO
+- `install/` — the preseed, `build-iso.sh`, which builds it into the ISO, and
+  `flash-usb.sh`, which writes the ISO to a stick
 - `ansible/` — `site.yml` and the `users`, `base` and `ssh` roles; values live
   in `group_vars/agent_servers.yml`
 

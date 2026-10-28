@@ -31,8 +31,11 @@ This writes `install/build/agent-server.iso`. Rebuild after every change to
 `preseed.cfg`. Write it to a USB stick (all data on the stick is lost):
 
 ```
-sudo dd if=install/build/agent-server.iso of=/dev/sdX bs=4M conv=fsync status=progress
+install/flash-usb.sh
 ```
+
+It finds the stick, shows it, and writes only after you type `yes`. Plug in
+one USB disk only; with none or several it stops.
 
 ## Boot it
 

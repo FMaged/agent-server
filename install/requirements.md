@@ -1,7 +1,8 @@
 # Requirements: Debian install (preseed)
 
-Files produced: `preseed.cfg`, and `build-iso.sh`, which builds it into a
-Debian netinst ISO. Target: `agent-server`, bare metal, UEFI.
+Files produced: `preseed.cfg`; `build-iso.sh`, which builds it into a Debian
+netinst ISO; and `flash-usb.sh`, which writes that ISO to a USB stick.
+Target: `agent-server`, bare metal, UEFI.
 
 ## Scope
 
@@ -45,6 +46,7 @@ beyond the packages listed below.
 | BR-06 | Output: `install/build/agent-server.iso`, overwritten on each run. `install/build/` is in `.gitignore`. Nothing else is left behind. |
 | BR-07 | Every change to `preseed.cfg` needs a rebuild. The ISO carries the bootstrap hash: never publish it. |
 | BR-08 | The ISO erases the disk without asking. Boot it once, from the firmware's one-time boot menu, so that after IR-11 the installed system boots, not the ISO again. |
+| BR-09 | `install/flash-usb.sh`, bash. Writes the ISO with `dd` to the one USB disk found, after a typed `yes`. Stops with none or several. |
 
 ## Handoff to Ansible
 

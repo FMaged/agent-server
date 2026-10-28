@@ -8,7 +8,7 @@ The host arrives with one `ansible` user, a bootstrap password, `sudo`,
 
 | ID | Requirement |
 |----|-------------|
-| AR-01 | First run connects with the bootstrap password: `ansible-playbook site.yml -k -K`. Needs `sshpass` on the controller. |
+| AR-01 | First run connects with the bootstrap password: `ansible-playbook site.yml -k -K`. Needs `sshpass` and `ansible-core` 2.14 or later on the controller. |
 | AR-02 | `users` role: writes the `ansible` user's `authorized_keys` from `agent_ssh_public_keys`, whole, so a dropped key is removed. |
 | AR-03 | `users` role: passwordless sudo in `/etc/sudoers.d/ansible`, validated with `visudo -cf`. Written before the password is removed. |
 | AR-04 | `users` role: locks the bootstrap password (`*`), leaving the key as the only credential. |
