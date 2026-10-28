@@ -1,14 +1,9 @@
 ---
 - name: Install the base packages
   ansible.builtin.apt:
-    name: "{{ base_packages }}"
+    name: "{{ base_packages + ['unattended-upgrades'] }}"
     state: present
     update_cache: true
-
-- name: Install unattended-upgrades
-  ansible.builtin.apt:
-    name: unattended-upgrades
-    state: present
 
 # The package generates this file from a debconf answer, so owning it pins the
 # behaviour rather than inheriting whichever default applied at install time.
@@ -22,9 +17,3 @@
     owner: root
     group: root
     mode: "0644"
-
-- name: Enable the daily upgrade timer
-  ansible.builtin.systemd_service:
-    name: apt-daily-upgrade.timer
-    enabled: true
-    state: started

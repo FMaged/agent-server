@@ -6,7 +6,6 @@
       PermitRootLogin no
       PasswordAuthentication no
       KbdInteractiveAuthentication no
-      PubkeyAuthentication yes
     dest: /etc/ssh/sshd_config.d/20-agent-server.conf
     owner: root
     group: root
