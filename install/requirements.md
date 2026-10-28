@@ -75,7 +75,7 @@ Changing any of this is a requirements change on both sides.
 3. After that reboot the installed system boots, not the installer.
 4. `lsblk` shows EFI 1 GB, swap 8 GB, ext4 root; `/sys/firmware/efi` exists.
 5. `ip addr` shows `192.168.150.221/24`; `getent hosts deb.debian.org` works.
-6. `hostname` returns `agent-server`.
+6. `hostname` returns `agent-server`; `timedatectl` shows `Europe/Berlin`, and `timedatectl show -p NTPSynchronized` returns `NTPSynchronized=yes`.
 7. `passwd -S root` shows `L`.
 8. `ssh ansible@192.168.150.221` with the password works; `sudo -v` works.
 9. `python3 --version` works; `apt update` succeeds against all three suites.

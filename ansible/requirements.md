@@ -24,6 +24,9 @@ The host arrives with one `ansible` user, a bootstrap password, `sudo`,
 Docker, Ollama, the AI agent, application secrets and the firewall are later
 roles with their own requirements.
 
+Hostname, timezone and NTP are set by the install alone (IR-03, IR-04).
+Ansible does not manage them; if they drift, reinstall.
+
 ## Acceptance
 
 1. First run with `-k -K` succeeds; the second run, key only, reports 0 changed.
