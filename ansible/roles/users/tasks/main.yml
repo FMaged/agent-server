@@ -9,40 +9,40 @@
       - agent_ssh_public_keys | length > 0
     fail_msg: agent_ssh_public_keys must be a non-empty list of key strings.
 
-- name: Keep the agent user's .ssh directory private
+- name: Keep the ansible user's .ssh directory private
   ansible.builtin.file:
-    path: /home/agent/.ssh
+    path: /home/{{ ansible_user }}/.ssh
     state: directory
-    owner: agent
-    group: agent
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: "0700"
 
-- name: Write the agent user's authorized_keys
+- name: Write the ansible user's authorized_keys
   ansible.builtin.copy:
     content: |
       # Managed by Ansible. A key dropped from the list is dropped from here.
       {% for key in agent_ssh_public_keys %}
       {{ key }}
       {% endfor %}
-    dest: /home/agent/.ssh/authorized_keys
-    owner: agent
-    group: agent
+    dest: /home/{{ ansible_user }}/.ssh/authorized_keys
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: "0600"
+
+- name: Grant the ansible user passwordless sudo
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible.
+      {{ ansible_user }} ALL=(ALL) NOPASSWD:ALL
+    dest: /etc/sudoers.d/ansible
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
 
 # The install-time password ships in the preseed, so it is public. Replacing it
 # with an invalid hash ends it, and leaves the key as the only credential.
 - name: Remove the install-time password
   ansible.builtin.user:
-    name: agent
+    name: "{{ ansible_user }}"
     password: "*"
-
-- name: Grant the agent user passwordless sudo
-  ansible.builtin.copy:
-    content: |
-      # Managed by Ansible.
-      agent ALL=(ALL) NOPASSWD:ALL
-    dest: /etc/sudoers.d/90-agent-nopasswd
-    owner: root
-    group: root
-    mode: "0440"
-    validate: /usr/sbin/visudo -cf %s

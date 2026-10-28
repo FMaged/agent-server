@@ -1,15 +1,14 @@
 # Unattended install
 
 `preseed.cfg` answers every question the Debian 13 (trixie) installer asks, so
-the install runs start to finish without a prompt and reboots into a host that
-accepts your SSH key.
+the install runs start to finish without a prompt and reboots into a plain
+Debian with SSH, `sudo` and Python. It configures nothing else: keys, sshd and
+sudo are set by the playbook in `ansible/`.
 
 ## Before you start
 
-`preseed.cfg` carries the public half of the `agent-server` keypair, and the
-private half has to be on the machine you will run Ansible from. To use a
-different key, replace the one on the `authorized_keys` line. It is the only
-credential the host will have: no password is set and root is locked.
+The only login is `ansible` with the password hash in `preseed.cfg`. Root is
+locked. Replace the hash if you do not know its password.
 
 Check that `partman-auto/disk` names the target machine's disk. It is set to
 `/dev/sda`; an NVMe SSD is usually `/dev/nvme0n1`. That disk is erased whole.
@@ -38,17 +37,13 @@ a BIOS/CSM install lays out a disk that UEFI firmware then refuses to boot.
 
 ## After it reboots
 
-The host comes up on `192.168.1.50` as `agent`:
+The host comes up on `192.168.150.221` as `ansible`. Run the playbook once with
+the bootstrap password; it installs your key, closes password login and
+removes the password:
 
 ```
-ssh agent@192.168.1.50
+cd ansible && ansible-playbook site.yml -k -K
 ```
-
-`sudo` works without a password, which is the only route to root, and root
-itself is locked. The account has the console password set in `preseed.cfg` —
-usable at the keyboard only, since sshd refuses passwords. Running the playbook
-in `ansible/` removes that password and takes ownership of the sudo drop-in, so
-log in at the console *before* the first playbook run if you need to.
 
 A reinstall gives the host a new SSH host key, which SSH refuses as a mismatch.
-Drop the stale entry with `ssh-keygen -R 192.168.1.50`.
+Drop the stale entry with `ssh-keygen -R 192.168.150.221`.

@@ -1,4 +1,4 @@
 agent_servers:
   hosts:
     agent-server:
-      ansible_host: 192.168.1.50
+      ansible_host: 192.168.150.221
