@@ -8,14 +8,15 @@ install, then an Ansible run that configures the base system.
 
 - The Debian 13 amd64 netinst image and its `SHA256SUMS`, a USB stick, and a
   machine whose firmware boots it in UEFI mode
-- `xorriso`, `cpio` and `gzip`, to build the ISO
+- `xorriso`, `cpio`, `gzip` and `openssl`, to build the ISO
 - Ansible; `ansible-core` 2.14 or later is enough
 - `sshpass` on the controller, for the first run's `-k`
 - The private key at `~/.ssh/agent-server`
 
 ## Install
 
-Build an ISO with the preseed inside it, from the netinst and its `SHA256SUMS`:
+Build an ISO with the preseed inside it, from the netinst and its `SHA256SUMS`.
+It asks for the bootstrap password, which only the ISO carries:
 
 ```
 install/build-iso.sh ~/Downloads/debian-13.7.0-amd64-netinst.iso
@@ -28,8 +29,8 @@ install/flash-usb.sh
 ```
 
 Boot the stick once, in UEFI mode, from the one-time boot menu. Nothing to
-answer or type. Read `install/README.md` first: the bootstrap password and the
-target disk are both set in the preseed, and the disk is erased whole.
+answer or type. Read `install/README.md` first: the target disk is set in the
+preseed, and it is erased whole.
 
 ## Configure
 

@@ -10,17 +10,16 @@ reads it before its first question, the network included.
 
 ## Before you start
 
-The only login is `ansible` with the password hash in `preseed.cfg`. Root is
-locked. Replace the hash if you do not know its password. The hash is public,
-in this repo and in the ISO, so it is fine only on a private LAN; for any other
-host, set a new one.
+The only login is `ansible`, with the bootstrap password you type when you
+build the ISO. Root is locked. The hash is in the ISO only, never in the repo,
+so do not publish the ISO.
 
 Check that `partman-auto/disk` names the target machine's disk. It is set to
 `/dev/sda`; an NVMe SSD is usually `/dev/nvme0n1`. That disk is erased whole.
 
 ## Build the ISO
 
-Needs `xorriso`, `cpio` and `gzip`. Download the netinst and its `SHA256SUMS`
+Needs `xorriso`, `cpio`, `gzip` and `openssl`. Download the netinst and its `SHA256SUMS`
 into the same directory from
 `https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/`, then:
 
@@ -28,8 +27,9 @@ into the same directory from
 install/build-iso.sh ~/Downloads/debian-13.7.0-amd64-netinst.iso
 ```
 
-This writes `install/build/agent-server.iso`. Rebuild after every change to
-`preseed.cfg`. Write it to a USB stick (all data on the stick is lost):
+It asks for the bootstrap password twice, then writes
+`install/build/agent-server.iso`. Rebuild after every change to `preseed.cfg`
+or to the password. Write it to a USB stick (all data on the stick is lost):
 
 ```
 install/flash-usb.sh

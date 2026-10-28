@@ -6,12 +6,15 @@ iso=${1:?usage: build-iso.sh <debian-13-amd64-netinst.iso>}
 here=$(cd "$(dirname "$0")" && pwd)
 out=$here/build/agent-server.iso
 
-for tool in xorriso cpio gzip; do
+for tool in xorriso cpio gzip openssl; do
     command -v "$tool" >/dev/null || { echo "missing: $tool" >&2; exit 1; }
 done
 
 # Debian's SHA256SUMS must sit next to the ISO.
 (cd "$(dirname "$iso")" && grep " $(basename "$iso")\$" SHA256SUMS | sha256sum -c --quiet)
+
+# Prompts twice; the hash goes only into the ISO.
+hash=$(openssl passwd -6)
 
 work=$(mktemp -d)
 trap 'chmod -R u+w "$work"; rm -rf "$work"' EXIT
@@ -23,7 +26,8 @@ xorriso -osirrox on -indev "$iso" -report_about FAILURE \
 chmod u+w "$work"/*
 
 gunzip "$work/initrd.gz"
-(cd "$here" && echo preseed.cfg | cpio -o -A -H newc -R 0:0 --quiet -F "$work/initrd")
+sed "s|@PASSWORD_HASH@|$hash|" "$here/preseed.cfg" > "$work/preseed.cfg"
+(cd "$work" && echo preseed.cfg | cpio -o -A -H newc -R 0:0 --quiet -F "$work/initrd")
 gzip -9 "$work/initrd"
 
 # Appended last so nothing earlier in the file overrides the default.
