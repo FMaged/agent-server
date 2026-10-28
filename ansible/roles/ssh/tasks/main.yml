@@ -3,6 +3,7 @@
   ansible.builtin.copy:
     content: |
       # Managed by Ansible.
+      PermitRootLogin no
       PasswordAuthentication no
       KbdInteractiveAuthentication no
       PubkeyAuthentication yes
