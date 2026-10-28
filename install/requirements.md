@@ -44,7 +44,7 @@ beyond the packages listed below.
 | BR-04 | The UEFI GRUB menu gets a default entry that starts the install after a 5 s timeout. Nothing is typed at the boot line. BIOS boot is not supported. |
 | BR-05 | `md5sum.txt` is regenerated, and the original boot records are kept, so the image boots from a USB stick written with `dd`. |
 | BR-06 | Output: `install/build/agent-server.iso`, overwritten on each run. `install/build/` is in `.gitignore`. Nothing else is left behind. |
-| BR-07 | Every change to `preseed.cfg` needs a rebuild. The ISO carries the bootstrap hash: never publish it. |
+| BR-07 | Every change to `preseed.cfg` needs a rebuild. The bootstrap hash is public in `preseed.cfg` and the ISO alike; a host off the private LAN needs a new one (OD-02). |
 | BR-08 | The ISO erases the disk without asking. Boot it once, from the firmware's one-time boot menu, so that after IR-11 the installed system boots, not the ISO again. |
 | BR-09 | `install/flash-usb.sh`, bash. Writes the ISO with `dd` to the one USB disk found, after a typed `yes`. Stops with none or several. |
 

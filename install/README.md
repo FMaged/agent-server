@@ -11,8 +11,9 @@ reads it before its first question, the network included.
 ## Before you start
 
 The only login is `ansible` with the password hash in `preseed.cfg`. Root is
-locked. Replace the hash if you do not know its password. The ISO carries that
-hash, so do not publish it.
+locked. Replace the hash if you do not know its password. The hash is public,
+in this repo and in the ISO, so it is fine only on a private LAN; for any other
+host, set a new one.
 
 Check that `partman-auto/disk` names the target machine's disk. It is set to
 `/dev/sda`; an NVMe SSD is usually `/dev/nvme0n1`. That disk is erased whole.
