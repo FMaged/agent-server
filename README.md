@@ -7,8 +7,7 @@ install, then an Ansible run that configures the base system.
 ## What you need
 
 - A Debian 13 netinst image, and a machine whose firmware boots it in UEFI mode
-- Ansible with the `community.general` collection — Debian's `ansible` package
-  includes it, a bare `ansible-core` install does not
+- Ansible; `ansible-core` is enough
 - `sshpass` on the controller, for the first run's `-k`
 - The private key at `~/.ssh/agent-server`
 
