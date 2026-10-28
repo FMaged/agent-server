@@ -54,3 +54,8 @@ The host comes up on `192.168.150.221` as `ansible`, with a bootstrap password
 and root locked. The first playbook run installs the key, removes the password
 and turns off password login. After that SSH is key-only, so whoever holds the
 SSH key holds root.
+
+The playbook also creates `devel`, a human user in the `sudo` group with the
+same keys. Its password is set by hand on the machine, once, with
+`sudo passwd devel`; the keyboard login only works after that, and `sudo` asks
+for that password.

@@ -43,3 +43,32 @@
   ansible.builtin.user:
     name: "{{ ansible_user }}"
     password: "*"
+
+# No password here: it is set once by hand with passwd, and re-runs leave it.
+- name: Create the devel user
+  ansible.builtin.user:
+    name: devel
+    groups: sudo
+    append: true
+    shell: /bin/bash
+    create_home: true
+
+- name: Keep devel's .ssh directory private
+  ansible.builtin.file:
+    path: /home/devel/.ssh
+    state: directory
+    owner: devel
+    group: devel
+    mode: "0700"
+
+- name: Write devel's authorized_keys
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible. A key dropped from the list is dropped from here.
+      {% for key in agent_ssh_public_keys %}
+      {{ key }}
+      {% endfor %}
+    dest: /home/devel/.ssh/authorized_keys
+    owner: devel
+    group: devel
+    mode: "0600"
