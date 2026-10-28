@@ -13,7 +13,7 @@ The host arrives with one `ansible` user, a bootstrap password, `sudo`,
 | AR-03 | `users` role: passwordless sudo in `/etc/sudoers.d/ansible`, validated with `visudo -cf`. Written before the password is removed. |
 | AR-04 | `users` role: locks the bootstrap password (`*`), leaving the key as the only credential. |
 | AR-05 | `ssh` role: drop-in with `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, validated with `sshd -t -f`, then reload `ssh`. |
-| AR-06 | `base` role: base packages, `unattended-upgrades` and its periodic config. |
+| AR-06 | `base` role: base packages, `unattended-upgrades` and its periodic config. No automatic reboot: reboot by hand when `/var/run/reboot-required` exists. |
 | AR-07 | Roles run in the order `users`, `base`, `ssh`. |
 | AR-08 | Values live in `group_vars/agent_servers.yml`. |
 | AR-09 | Every task is idempotent: a second run reports no changes. |
