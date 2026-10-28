@@ -17,6 +17,7 @@ The host arrives with one `ansible` user, a bootstrap password, `sudo`,
 | AR-07 | Roles run in the order `users`, `base`, `ssh`. |
 | AR-08 | Values live in `group_vars/agent_servers.yml`. |
 | AR-09 | Every task is idempotent: a second run reports no changes. |
+| AR-10 | `users` role: fails first, changing nothing, if the public half of `ansible_ssh_private_key_file` is not in `agent_ssh_public_keys`. |
 
 ## Out of scope
 

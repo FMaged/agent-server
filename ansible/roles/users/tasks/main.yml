@@ -1,13 +1,11 @@
 ---
-# A string here, or an empty list, writes an authorized_keys nobody can log in
-# with — and sshd refuses passwords, so there is no fallback.
-- name: Check the public key list is a non-empty list
+# Without this key on the host, locking the password below locks us out.
+- name: Check the controller's key is in the list
   ansible.builtin.assert:
-    that:
-      - agent_ssh_public_keys is sequence
-      - agent_ssh_public_keys is not string
-      - agent_ssh_public_keys | length > 0
-    fail_msg: agent_ssh_public_keys must be a non-empty list of key strings.
+    that: controller_key in agent_ssh_public_keys | join(' ') | split
+    fail_msg: The key for {{ ansible_ssh_private_key_file }} is not in agent_ssh_public_keys.
+  vars:
+    controller_key: "{{ lookup('pipe', 'ssh-keygen -y -f ' ~ ansible_ssh_private_key_file).split()[1] }}"
 
 - name: Keep the ansible user's .ssh directory private
   ansible.builtin.file:
