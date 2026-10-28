@@ -1,6 +1,5 @@
 ---
-# Debian's unit is ssh, not sshd. Its ExecReload runs sshd -t first, so a bad
-# config fails the reload instead of taking the daemon down.
+# ExecReload runs `sshd -t` first.
 - name: Reload sshd
   ansible.builtin.systemd_service:
     name: ssh

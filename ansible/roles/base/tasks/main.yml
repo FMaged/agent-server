@@ -5,8 +5,7 @@
     state: present
     update_cache: true
 
-# The package generates this file from a debconf answer, so owning it pins the
-# behaviour rather than inheriting whichever default applied at install time.
+# Owned so the debconf default does not decide.
 - name: Turn on the periodic security upgrades
   ansible.builtin.copy:
     content: |

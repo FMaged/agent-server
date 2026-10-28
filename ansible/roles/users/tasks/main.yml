@@ -38,8 +38,7 @@
     mode: "0440"
     validate: /usr/sbin/visudo -cf %s
 
-# The install-time password ships in the preseed, so it is public. Replacing it
-# with an invalid hash ends it, and leaves the key as the only credential.
+# The bootstrap password is public; `*` ends it.
 - name: Remove the install-time password
   ansible.builtin.user:
     name: "{{ ansible_user }}"
