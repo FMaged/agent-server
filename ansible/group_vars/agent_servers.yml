@@ -12,3 +12,36 @@ base_packages:
   - git
   - rsync
   - vim
+
+llm_repo: https://github.com/ggml-org/llama.cpp
+llm_tag: v0.8.0
+llm_src_dir: /opt/llama.cpp
+llm_models_dir: /srv/llama/models
+llm_key_file: /etc/llama/api-key
+llm_bind: 192.168.150.221
+llm_port: 8080
+llm_threads: 2
+llm_ctx: 16384
+llm_build_packages:
+  - build-essential
+  - cmake
+  - git
+
+# Weights are never committed; each is pinned by sha256.
+llm_models:
+  qwen3-coder-30b-a3b:
+    file: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+    url: https://huggingface.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/resolve/main/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+    sha256: fadc3e5f8d42bf7e894a785b05082e47daee4df26680389817e2093056f088ad
+  qwen3-8b:
+    file: Qwen3-8B-Q4_K_M.gguf
+    url: https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
+    sha256: 120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4
+  qwen3-0.6b:
+    file: Qwen3-0.6B-Q4_K_M.gguf
+    url: https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf
+    sha256: ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a
+
+# The model the service runs; a key of llm_models. Models in llm_download are fetched.
+llm_model: qwen3-8b
+llm_download: [qwen3-8b]

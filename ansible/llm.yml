@@ -1,0 +1,6 @@
+---
+# Run after site.yml.
+- name: Serve a model with llama.cpp
+  hosts: agent_servers
+  roles:
+    - llm

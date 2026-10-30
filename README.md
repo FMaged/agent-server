@@ -50,12 +50,32 @@ ansible-playbook site.yml
 
 A second run changes nothing.
 
+## Model server
+
+After `site.yml`, `llm.yml` builds llama.cpp at the tag in `llm_tag`, downloads
+the models in `llm_download` (checked against their sha256) and starts
+`llama-server` on `llm_bind:llm_port`. The model it serves is `llm_model`; all
+are set in `group_vars/agent_servers.yml`.
+
+```
+ansible-playbook llm.yml
+```
+
+Requests need the API key, which the first run generates on the host. Read it
+with `ssh ansible@192.168.150.221 sudo cat /etc/llama/api-key`, then:
+
+```
+curl -H "Authorization: Bearer <key>" http://192.168.150.221:8080/v1/models
+```
+
+The traffic is plain HTTP, so use it on the LAN only.
+
 ## Layout
 
 - `install/` — the preseed, `build-iso.sh`, which builds it into the ISO, and
   `flash-usb.sh`, which writes the ISO to a stick
-- `ansible/` — `site.yml` and the `users`, `base` and `ssh` roles; values live
-  in `group_vars/agent_servers.yml`
+- `ansible/` — `site.yml`, `llm.yml` and the `users`, `base`, `ssh` and `llm`
+  roles; values live in `group_vars/agent_servers.yml`
 
 The host comes up on `192.168.150.221` with one user, `devel`, in the `sudo`
 group with the password typed at the ISO build, and root locked. The first

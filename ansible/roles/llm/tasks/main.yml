@@ -1,0 +1,90 @@
+---
+- name: Install the build packages
+  ansible.builtin.apt:
+    name: "{{ llm_build_packages }}"
+    state: present
+    update_cache: true
+
+- name: Create the llama user
+  ansible.builtin.user:
+    name: llama
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Clone llama.cpp at the tag
+  ansible.builtin.git:
+    repo: "{{ llm_repo }}"
+    dest: "{{ llm_src_dir }}"
+    version: "{{ llm_tag }}"
+    depth: 1
+  register: llm_clone
+
+- name: Check for the built server
+  ansible.builtin.stat:
+    path: "{{ llm_src_dir }}/build/bin/llama-server"
+  register: llm_server
+
+- name: Build llama-server and llama-bench
+  ansible.builtin.shell: |
+    cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release
+    cmake --build build --target llama-server llama-bench -j"$(nproc)"
+  args:
+    chdir: "{{ llm_src_dir }}"
+  when: llm_clone.changed or not llm_server.stat.exists
+  changed_when: true
+  notify: Restart llama-server
+
+- name: Create the models directory
+  ansible.builtin.file:
+    path: "{{ llm_models_dir }}"
+    state: directory
+    owner: root
+    group: llama
+    mode: "0750"
+
+- name: Download the models
+  ansible.builtin.get_url:
+    url: "{{ llm_models[item].url }}"
+    dest: "{{ llm_models_dir }}/{{ llm_models[item].file }}"
+    checksum: "sha256:{{ llm_models[item].sha256 }}"
+    owner: root
+    group: llama
+    mode: "0640"
+  loop: "{{ llm_download }}"
+  notify: Restart llama-server
+
+- name: Create the key directory
+  ansible.builtin.file:
+    path: "{{ llm_key_file | dirname }}"
+    state: directory
+    owner: root
+    group: llama
+    mode: "0750"
+
+# force: false keeps the key from the first run.
+- name: Generate the API key once
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.password', '/dev/null chars=ascii_letters,digits length=40') }}\n"
+    dest: "{{ llm_key_file }}"
+    owner: root
+    group: llama
+    mode: "0640"
+    force: false
+  no_log: true
+
+- name: Install the llama-server unit
+  ansible.builtin.template:
+    src: llama-server.service.j2
+    dest: /etc/systemd/system/llama-server.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart llama-server
+
+- name: Enable and start llama-server
+  ansible.builtin.systemd_service:
+    name: llama-server
+    enabled: true
+    state: started
+    daemon_reload: true
