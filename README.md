@@ -68,12 +68,17 @@ with `ssh ansible@192.168.150.221 sudo cat /etc/llama/api-key`, then:
 curl -H "Authorization: Bearer <key>" http://192.168.150.221:8080/v1/models
 ```
 
+`bruno/` is a Bruno collection with the same calls: models, no key (expect
+401), a chat completion and a tool call. Open it in Bruno, pick the `lan`
+environment and paste the key into its `apiKey` secret.
+
 The traffic is plain HTTP, so use it on the LAN only.
 
 ## Layout
 
 - `install/` — the preseed, `build-iso.sh`, which builds it into the ISO, and
   `flash-usb.sh`, which writes the ISO to a stick
+- `bruno/` — Bruno requests for the model server
 - `ansible/` — `site.yml`, `llm.yml` and the `users`, `base`, `ssh` and `llm`
   roles; values live in `group_vars/agent_servers.yml`
 
