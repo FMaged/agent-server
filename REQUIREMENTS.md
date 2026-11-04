@@ -129,7 +129,7 @@ restarted.
 |----|-------------|
 | LR-09 | Installs `llm_build_packages` and creates the system user `llama`, with no login shell and no home. |
 | LR-10 | Clones `llm_repo` at the tag `llm_tag` into `llm_src_dir`. |
-| LR-11 | Builds `llama-server` and `llama-bench` with `-DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release` on every run. The build is incremental, so an unchanged tree is quick, and a build that failed last time is finished on the next run. It fails the run if either binary is missing afterwards. |
+| LR-11 | Builds `llama-server` and `llama-bench` with `-DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release` on every run. The web UI is off (`-DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF`): by default llama.cpp downloads it at build time and falls back to `latest`, which GR-05 forbids. The build is incremental, so an unchanged tree is quick, and a build that failed last time is finished on the next run. It fails the run if either binary is missing afterwards. |
 
 ### Service
 

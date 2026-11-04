@@ -126,11 +126,13 @@
   register: llm_clone
 
 # Always run: cmake is incremental, so an unchanged tree is a quick no-op, and a
-# build that failed last time is finished now.
+# build that failed last time is finished now. The UI is off because llama.cpp
+# would download it from `latest` at build time, unpinned; only the API is used.
 - name: Build llama-server and llama-bench
   ansible.builtin.shell: |
     set -e
-    cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release
+    cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release \
+      -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF
     cmake --build build --target llama-server llama-bench -j"$(nproc)"
     test -x build/bin/llama-server
     test -x build/bin/llama-bench
