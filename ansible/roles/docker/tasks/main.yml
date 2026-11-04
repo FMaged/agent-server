@@ -1,0 +1,33 @@
+---
+# Debian's packages, not Docker's repository, so unattended-upgrades updates
+# them. docker-compose is the `docker compose` plugin.
+- name: Install Docker
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-cli
+      - docker-compose
+    state: present
+    update_cache: true
+
+# journald rotates the container logs; live-restore keeps the containers running
+# while Docker itself restarts or upgrades. Nobody joins the docker group: it is
+# equal to root, so Docker is used through sudo.
+- name: Configure the Docker daemon
+  ansible.builtin.copy:
+    content: |
+      {
+        "log-driver": "journald",
+        "live-restore": true
+      }
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started

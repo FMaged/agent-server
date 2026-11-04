@@ -2,9 +2,11 @@
 - import_playbook: check-controller.yml
 
 # users comes first: ansible needs its key and sudo before ssh turns passwords off.
+# docker comes last; only llm.yml needs it.
 - name: Configure agent-server
   hosts: agent_servers
   roles:
     - users
     - base
     - ssh
+    - docker
