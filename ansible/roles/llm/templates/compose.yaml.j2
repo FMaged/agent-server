@@ -1,0 +1,32 @@
+# Managed by Ansible.
+name: llama-server
+services:
+  llama-server:
+    container_name: llama-server
+    image: "{{ llm_image }}"
+    # llama's uid and gid, so the root:llama rights on the models and the key
+    # apply inside the container too.
+    user: "{{ llm_user.uid }}:{{ llm_user.group }}"
+    command:
+      - --model
+      - /models/{{ llm_models[llm_model].file }}
+      - --api-key-file
+      - /run/llama/api-key
+      # 8080 inside, where the image's own health check looks.
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --jinja
+      - -t
+      - "{{ llm_threads }}"
+      - -c
+      - "{{ llm_ctx }}"
+    volumes:
+      - {{ llm_models_dir }}:/models:ro
+      - {{ llm_key_file }}:/run/llama/api-key:ro
+    ports:
+      - "{{ llm_bind }}:{{ llm_port }}:8080"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped

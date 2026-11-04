@@ -13,9 +13,12 @@ base_packages:
   - rsync
   - vim
 
-llm_repo: https://github.com/ggml-org/llama.cpp
-llm_tag: v0.8.0
-llm_src_dir: /opt/llama.cpp
+# llama.cpp's CPU server image, pinned by digest. The tag is for people; Docker
+# uses the digest. To pin a newer release, take its server-b<N> tag and digest,
+# and check the image's org.opencontainers.image.revision label is the release's
+# commit. README.md shows how.
+llm_image: ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+llm_compose_dir: /opt/llama-server
 llm_models_dir: /srv/llama/models
 llm_key_file: /etc/llama/api-key
 llm_bind: 192.168.150.221
@@ -26,10 +29,6 @@ llm_ctx: 16384
 llm_disk_reserve: 5368709120
 # Seconds the chat check may take; CPU generation is slow.
 llm_check_timeout: 120
-llm_build_packages:
-  - build-essential
-  - cmake
-  - git
 
 # Weights are never committed. Each entry is one GGUF file (no split models),
 # pinned by sha256; size is its size in bytes, for the free-space check. A new
@@ -59,9 +58,9 @@ llm_models:
     size: 4683073248
 
 # The model the service runs; a key of llm_models. To switch, change this line
-# and run llm.yml: it downloads the new model, restarts the service, checks it
-# answers a chat request, then deletes every .gguf that is neither llm_model nor
-# in llm_download. Change llm_tag and llm_model in separate runs.
+# and run llm.yml: it downloads the new model, recreates the container, checks
+# it answers a chat request, then deletes every .gguf that is neither llm_model
+# nor in llm_download. Change llm_image and llm_model in separate runs.
 llm_model: qwen3-8b
 # Extra models to keep on the host besides llm_model.
 llm_download: []

@@ -36,18 +36,13 @@
   loop_control:
     label: "{{ item.key }}"
 
-- name: Install the build packages
-  ansible.builtin.apt:
-    name: "{{ llm_build_packages }}"
-    state: present
-    update_cache: true
-
 - name: Create the llama user
   ansible.builtin.user:
     name: llama
     system: true
     shell: /usr/sbin/nologin
     create_home: false
+  register: llm_user
 
 - name: Create the models directory
   ansible.builtin.file:
@@ -97,8 +92,8 @@
     llm_need: "{{ llm_missing | map('extract', llm_models, 'size') | sum }}"
     llm_free: "{{ llm_df.stdout_lines[-1] | trim }}"
 
-# Only missing files are fetched; the unit change, not the download, restarts
-# the service, so adding an extra model does not interrupt it.
+# Only missing files are fetched. The container is recreated only when the
+# compose file or the image changes, so an extra model does not interrupt it.
 - name: Download the models
   ansible.builtin.get_url:
     url: "{{ llm_models[item].url }}"
@@ -116,30 +111,6 @@
     group: llama
     mode: "0640"
   loop: "{{ llm_wanted }}"
-
-- name: Clone llama.cpp at the tag
-  ansible.builtin.git:
-    repo: "{{ llm_repo }}"
-    dest: "{{ llm_src_dir }}"
-    version: "{{ llm_tag }}"
-    depth: 1
-  register: llm_clone
-
-# Always run: cmake is incremental, so an unchanged tree is a quick no-op, and a
-# build that failed last time is finished now. The UI is off because llama.cpp
-# would download it from `latest` at build time, unpinned; only the API is used.
-- name: Build llama-server and llama-bench
-  ansible.builtin.shell: |
-    set -e
-    cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release \
-      -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF
-    cmake --build build --target llama-server llama-bench -j"$(nproc)"
-    test -x build/bin/llama-server
-    test -x build/bin/llama-bench
-  args:
-    chdir: "{{ llm_src_dir }}"
-    executable: /bin/bash
-  changed_when: false
 
 - name: Create the key directory
   ansible.builtin.file:
@@ -168,55 +139,59 @@
     group: llama
     mode: "0640"
 
-- name: Install the llama-server unit
+- name: Create the compose directory
+  ansible.builtin.file:
+    path: "{{ llm_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the compose file
   ansible.builtin.template:
-    src: llama-server.service.j2
-    dest: "{{ llm_unit_file }}"
+    src: compose.yaml.j2
+    dest: "{{ llm_compose_dir }}/compose.yaml"
     owner: root
     group: root
     mode: "0644"
 
-# The binaries, every shared library they may load, and the unit. The restart
-# comes from comparing these with what the service last passed its checks with,
-# not from a notify on the unit, so a run that stopped before its restart
-# (failed, interrupted or disconnected) leaves the next run to restart.
-- name: Hash the build and the unit
-  ansible.builtin.shell: |
-    set -euo pipefail
-    { printf '%s\n' bin/llama-server bin/llama-bench
-      find . -type f -name '*.so*' -not -path '*/CMakeFiles/*' -printf '%P\n'
-    } | sort | xargs -d '\n' sha256sum
-    sha256sum {{ llm_unit_file }}
-  args:
-    chdir: "{{ llm_src_dir }}/build"
-    executable: /bin/bash
-  register: llm_hashes
+# The image is pinned by digest, so one already there never needs pulling
+# again. Compose's own `--policy missing` pulls a digest every time, and reports
+# a change, so look first.
+- name: Look for the image
+  ansible.builtin.command: docker image inspect --format {% raw %}'{{.Id}}'{% endraw %} {{ llm_image | quote }}
+  register: llm_image_found
   changed_when: false
+  failed_when: false
   check_mode: false
 
-- name: Read what the service last passed its checks with
-  ansible.builtin.slurp:
-    src: "{{ llm_build_stamp }}"
-  register: llm_stamp
-  failed_when: false
+# Before the container is touched, so a failed pull leaves it serving.
+- name: Pull the image
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ llm_compose_dir }}"
+  when: llm_image_found.rc != 0
 
-- name: Restart for a build or unit the service has not run yet
-  ansible.builtin.debug:
-    msg: The build or the unit differs from what the service last passed its checks with.
-  when: llm_hashes.stdout | trim != (llm_stamp.content | default('') | b64decode | trim)
-  changed_when: true
-  notify: Restart llama-server
+# The source build's service holds the port the container needs. Its files stay
+# until the checks pass, so a failed first container run can still go back to it.
+- name: Look for the source build's unit
+  ansible.builtin.stat:
+    path: "{{ llm_old_unit_file }}"
+  register: llm_old_unit
 
-- name: Enable and start llama-server
+- name: Stop the source build's service
   ansible.builtin.systemd_service:
     name: llama-server
-    enabled: true
-    state: started
-    daemon_reload: true
+    state: stopped
+    enabled: false
+  when: llm_old_unit.stat.exists
 
-# Run a pending restart now, so the checks below see the final process.
-- name: Apply pending restarts
-  ansible.builtin.meta: flush_handlers
+# Compose compares the running container with the compose file and the image,
+# and recreates it if they differ. So a file written by a run that stopped
+# before this task is applied by the next run.
+- name: Bring up the container
+  community.docker.docker_compose_v2:
+    project_src: "{{ llm_compose_dir }}"
+    state: present
 
 # /health answers 503 while the model loads; CPU loading can take minutes.
 - name: Wait for the model to load
@@ -271,14 +246,40 @@
   vars:
     llm_reply: "{{ (llm_chat.json.choices | default([{}], true))[0].message | default({}) }}"
 
-# Written only now, after the restarted service passed every check.
-- name: Record the build and the unit the service now runs
-  ansible.builtin.copy:
-    content: "{{ llm_hashes.stdout | trim }}\n"
-    dest: "{{ llm_build_stamp }}"
-    owner: root
-    group: root
-    mode: "0644"
+# Cleanup runs only after every check passed.
+- name: Remove the source build's unit
+  ansible.builtin.file:
+    path: "{{ llm_old_unit_file }}"
+    state: absent
+  register: llm_old_unit_removed
+
+- name: Reload systemd without the unit
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: llm_old_unit_removed is changed
+
+- name: Remove the source build
+  ansible.builtin.file:
+    path: "{{ llm_old_src_dir }}"
+    state: absent
+
+# The old image is kept until the new one passes its checks, so a rollback
+# pulls nothing.
+- name: Remove the llama.cpp images other than llm_image
+  ansible.builtin.shell: |
+    set -euo pipefail
+    keep=$(docker image inspect --format {% raw %}'{{.Id}}'{% endraw %} {{ llm_image | quote }})
+    ids=$(docker image ls --quiet --no-trunc ghcr.io/ggml-org/llama.cpp | sort -u)
+    for id in $ids; do
+      if [ "$id" != "$keep" ]; then
+        docker image rm "$id" >/dev/null
+        echo "$id"
+      fi
+    done
+  args:
+    executable: /bin/bash
+  register: llm_old_images
+  changed_when: llm_old_images.stdout | length > 0
 
 # Ansible owns this directory: a .gguf not in llm_wanted is removed. This runs
 # last, so a new model that fails any check leaves the old file for a rollback.

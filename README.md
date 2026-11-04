@@ -1,8 +1,9 @@
 # agent-server
 
 A single Debian 13 machine that hosts coding agents, reachable over SSH and
-rebuildable from bare metal without manual steps. Two stages: an unattended
-install, then an Ansible run that configures the base system.
+rebuildable from bare metal without manual steps. Three stages: an unattended
+install, an Ansible run that configures the base system and Docker, and one
+that runs llama.cpp in a container.
 
 ## What you need
 
@@ -10,6 +11,8 @@ install, then an Ansible run that configures the base system.
   machine whose firmware boots it in UEFI mode
 - `xorriso`, `cpio`, `gzip` and `openssl`, to build the ISO
 - Ansible; `ansible-core` 2.18 or later (Debian 13 has Python 3.13)
+- The `community.docker` collection, 4.0 or later. In `ansible/`, run
+  `ansible-galaxy collection install -r requirements.yml`
 - `sshpass` on the controller, for the first run's `-k`
 - The private key at `~/.ssh/agent-server`
 
@@ -48,27 +51,46 @@ Every later run drops the flags and connects as `ansible` on the key:
 ansible-playbook site.yml
 ```
 
-A second run changes nothing.
+A second run changes nothing. `site.yml` also installs Debian's Docker
+packages, so `unattended-upgrades` keeps them updated. Nobody is in the
+`docker` group, because that is equal to root: use `sudo docker` on the host.
 
 ## Model server
 
-After `site.yml`, `llm.yml` builds llama.cpp at the tag in `llm_tag`, downloads
+After `site.yml`, `llm.yml` pulls the llama.cpp image in `llm_image`, downloads
 `llm_model` and any extras in `llm_download` (checked against their sha256) and
-starts `llama-server` on `llm_bind:llm_port`, serving `llm_model`. All are set
-in `group_vars/agent_servers.yml`.
-
-To switch models, set `llm_model` to another key of `llm_models` and run
-`llm.yml` again. It checks the new model fits on the disk, downloads it,
-restarts the service, and waits until the model answers a chat request. Only
-then does it delete every `.gguf` that is not `llm_model` or in `llm_download`.
-If the download fails, the old model keeps serving. If the new model fails
-after the restart, the API is down but the old file is still there: set
-`llm_model` back and run again. Change `llm_tag` and `llm_model` in separate
-runs. `REQUIREMENTS.md` lists every failure case.
+runs it in the container `llama-server` on `llm_bind:llm_port`, serving
+`llm_model`. All are set in `group_vars/agent_servers.yml`. On a host that ran
+the old source build, the first run stops and removes the `llama-server`
+systemd unit and `/opt/llama.cpp`.
 
 ```
 ansible-playbook llm.yml
 ```
+
+To switch models, set `llm_model` to another key of `llm_models` and run
+`llm.yml` again. It checks the new model fits on the disk, downloads it,
+recreates the container, and waits until the model answers a chat request.
+Only then does it delete every `.gguf` that is not `llm_model` or in
+`llm_download`. If the download fails, the old model keeps serving. If the new
+model fails after the recreate, the API is down but the old file is still
+there: set `llm_model` back and run again. `REQUIREMENTS.md` lists every
+failure case.
+
+Change `llm_image` and `llm_model` in separate runs. To pin a newer llama.cpp,
+take the release's `server-b<N>` tag, read its digest, and check the image's
+`org.opencontainers.image.revision` label is the commit of the tag `b<N>`:
+
+```
+docker buildx imagetools inspect ghcr.io/ggml-org/llama.cpp:server-b<N>
+docker buildx imagetools inspect --format '{{ (index .Image "linux/amd64").Config.Labels }}' ghcr.io/ggml-org/llama.cpp:server-b<N>
+git ls-remote https://github.com/ggml-org/llama.cpp refs/tags/b<N>
+```
+
+Set `llm_image` to `ghcr.io/ggml-org/llama.cpp:server-b<N>@sha256:<digest>`
+and run `llm.yml`. The old image is removed only after the new one passes the
+checks, so to undo a failed upgrade, set `llm_image` back and run again: that
+run pulls nothing.
 
 Requests need the API key, which the first run generates on the host. Read it
 with `ssh -i ~/.ssh/agent-server ansible@192.168.150.221 sudo cat /etc/llama/api-key`,
@@ -84,14 +106,22 @@ environment and paste the key into its `apiKey` secret.
 
 The traffic is plain HTTP, so use it on the LAN only.
 
+On the host, the logs and a benchmark of the served model:
+
+```
+sudo docker logs llama-server
+sudo docker exec llama-server /app/llama bench -m /models/<llm_model's file>
+```
+
 ## Layout
 
 - `REQUIREMENTS.md` — what the repo must do, stage by stage, and how to check it
 - `install/` — the preseed, `build-iso.sh`, which builds it into the ISO, and
   `flash-usb.sh`, which writes the ISO to a stick
 - `bruno/` — Bruno requests for the model server
-- `ansible/` — `site.yml`, `llm.yml` and the `users`, `base`, `ssh` and `llm`
-  roles; values live in `group_vars/agent_servers.yml`
+- `ansible/` — `site.yml`, `llm.yml` and the `users`, `base`, `ssh`, `docker`
+  and `llm` roles; values live in `group_vars/agent_servers.yml`, and the
+  collections the controller needs in `requirements.yml`
 
 The host comes up on `192.168.150.221` with one user, `devel`, in the `sudo`
 group with the password typed at the ISO build, and root locked. The first
