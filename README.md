@@ -85,6 +85,7 @@ The traffic is plain HTTP, so use it on the LAN only.
 
 ## Layout
 
+- `REQUIREMENTS.md` — what the repo must do, stage by stage, and how to check it
 - `install/` — the preseed, `build-iso.sh`, which builds it into the ISO, and
   `flash-usb.sh`, which writes the ISO to a stick
 - `bruno/` — Bruno requests for the model server
