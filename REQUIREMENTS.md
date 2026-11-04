@@ -187,7 +187,7 @@ Each will be a later role with its own requirements.
 | OD-01 | Target disk | `/dev/sda`, the 128 GB SATA SSD. Closed. |
 | OD-02 | `devel`'s password | Typed at each build; the hash is only in the ISO. Closed. |
 | OD-03 | Delivery of the preseed | Built into the netinst ISO by `build-iso.sh`. Replaces `preseed/url`, whose network answers came too late. Closed. |
-| OD-04 | Reading the API key | `ssh ansible@192.168.150.221 sudo cat /etc/llama/api-key`. A read-only login, which GR-02 allows. Closed. |
+| OD-04 | Reading the API key | `ssh -i ~/.ssh/agent-server ansible@192.168.150.221 sudo cat /etc/llama/api-key`. A read-only login, which GR-02 allows. Closed. |
 | OD-05 | Version check in `llm.yml` | Both playbooks import `check-controller.yml` (AR-02). Closed. |
 | OD-06 | Rollback after a failed switch | Manual, through Ansible (LR-27). Closed. Automatic rollback, which would restore the previous unit, restart it and check it again, may be added later. |
 

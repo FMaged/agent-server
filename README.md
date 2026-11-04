@@ -71,7 +71,8 @@ ansible-playbook llm.yml
 ```
 
 Requests need the API key, which the first run generates on the host. Read it
-with `ssh ansible@192.168.150.221 sudo cat /etc/llama/api-key`, then:
+with `ssh -i ~/.ssh/agent-server ansible@192.168.150.221 sudo cat /etc/llama/api-key`,
+then:
 
 ```
 curl -H "Authorization: Bearer <key>" http://192.168.150.221:8080/v1/models
