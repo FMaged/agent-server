@@ -11,3 +11,28 @@
         that: ansible_version.full is version('2.18', '>=')
         fail_msg: "ansible-core 2.18 or later is needed for Python 3.13 on Debian 13"
         quiet: true
+
+    - name: Find the community.docker collection
+      ansible.builtin.command: ansible-galaxy collection list community.docker --format json
+      register: controller_docker
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    # The llm role's compose modules come from this collection.
+    - name: Require community.docker 4.0 or later
+      ansible.builtin.assert:
+        that:
+          - controller_docker.rc == 0
+          - controller_docker_versions | select('version', '4.0.0', '>=') | list | length > 0
+        fail_msg: >-
+          community.docker 4.0 or later is needed. In ansible/, run:
+          ansible-galaxy collection install -r requirements.yml
+        quiet: true
+      vars:
+        # {"<path>": {"community.docker": {"version": "4.7.0"}}, ...}
+        controller_docker_versions: >-
+          {{ (controller_docker.stdout | from_json).values()
+             | map('dict2items') | flatten
+             | selectattr('key', 'eq', 'community.docker')
+             | map(attribute='value.version') | list }}
