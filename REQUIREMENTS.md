@@ -5,9 +5,10 @@ for coding agents that serves a local model over HTTP on the LAN. It does this
 in three stages, each owned by one part of the repo:
 
 1. **Install** (`install/`): an unattended Debian install from a USB stick.
-2. **Configure** (`ansible/site.yml`): users, SSH, packages and updates.
-3. **Model server** (`ansible/llm.yml`): llama.cpp serving one model behind an
-   API key.
+2. **Configure** (`ansible/site.yml`): users, SSH, packages, updates and
+   Docker.
+3. **Model server** (`ansible/llm.yml`): llama.cpp in a Docker container,
+   serving one model behind an API key.
 
 After the install, nobody logs in to change the server. Every change is made
 in this repo and applied with a playbook run.
@@ -29,7 +30,7 @@ in this repo and applied with a playbook run.
 | GR-02 | After the install, the server is changed only through Ansible. No step needs someone to log in and change the host. A read-only login, for example to read the API key, is allowed. |
 | GR-03 | No secret is committed: not `devel`'s password or its hash, not the SSH private key, not the API key. Model weights are not committed either. |
 | GR-04 | Every playbook is idempotent: a second run with the same values reports 0 changed and restarts nothing. |
-| GR-05 | Every download is pinned: the Debian ISO by Debian's `SHA256SUMS`, llama.cpp by a git tag, each model by its sha256. |
+| GR-05 | Every download is pinned: the Debian ISO by Debian's `SHA256SUMS`, the llama.cpp image by its digest, each model by its sha256. |
 | GR-06 | Ansible values live in `ansible/group_vars/agent_servers.yml`. |
 
 ## 1. Install (preseed)
@@ -86,14 +87,17 @@ Changing any of this is a requirements change on both sides.
 | ID | Requirement |
 |----|-------------|
 | AR-01 | First run connects as `devel` with its password: `ansible-playbook site.yml -k -K -e ansible_user=devel`. Later runs connect as `ansible` with the key at `~/.ssh/agent-server`. The controller needs `sshpass` for the first run. |
-| AR-02 | The controller needs `ansible-core` 2.18 or later, the first release that supports Python 3.13 on the target. `site.yml` and `llm.yml` both start with `check-controller.yml`, which checks this on the controller and stops before any host is touched. |
+| AR-02 | The controller needs `ansible-core` 2.18 or later, the first release that supports Python 3.13 on the target, and the `community.docker` collection 4.0 or later, from `ansible/requirements.yml` (`ansible-galaxy collection install -r requirements.yml`). `site.yml` and `llm.yml` both start with `check-controller.yml`, which checks both on the controller and stops before any host is touched. |
 | AR-03 | `users` role: fails first, changing nothing, if the public half of `ansible_ssh_private_key_file` is not in `agent_ssh_public_keys`. |
 | AR-04 | `users` role: creates `ansible` with no password, and writes the `authorized_keys` of `ansible` and `devel` from `agent_ssh_public_keys`, whole, so a dropped key is removed. |
 | AR-05 | `users` role: passwordless sudo in `/etc/sudoers.d/ansible`, validated with `visudo -cf`. `devel` keeps Debian's `%sudo` rule, which asks for its password. |
 | AR-06 | `users` role: never sets or changes a password. `devel`'s comes from the install. |
 | AR-07 | `ssh` role: drop-in with `PermitRootLogin no`, `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, validated with `sshd -t -f`, then reload `ssh`. |
 | AR-08 | `base` role: the packages in `base_packages`, `unattended-upgrades` and its periodic config in `/etc/apt/apt.conf.d/20auto-upgrades`. No automatic reboot: reboot by hand when `/var/run/reboot-required` exists. |
-| AR-09 | Roles run in the order `users`, `base`, `ssh`, so `ansible` has its key and sudo before password login is turned off. |
+| AR-09 | Roles run in the order `users`, `base`, `ssh`, `docker`, so `ansible` has its key and sudo before password login is turned off. |
+| AR-10 | `docker` role: installs Debian's `docker.io`, `docker-cli` and `docker-compose` (the `docker compose` plugin), not Docker's own apt repository, so `unattended-upgrades` (AR-08) updates them like every other package. Docker is enabled at boot. |
+| AR-11 | `docker` role: `/etc/docker/daemon.json` sets the `journald` log driver, so container logs rotate with the journal instead of growing under `/var/lib/docker`, and `live-restore`, so an upgrade of Docker does not stop the running containers. A change to the file restarts Docker. |
+| AR-12 | `docker` role: nobody is added to the `docker` group, because it is equal to root. Docker is used through `sudo`. |
 
 Hostname, timezone and NTP are set by the install alone (IR-03, IR-04).
 Ansible does not manage them; if they drift, reinstall.
@@ -101,9 +105,9 @@ Ansible does not manage them; if they drift, reinstall.
 ## 4. Model server (`llm.yml`)
 
 `llm.yml` runs the `llm` role, after `site.yml`, as `ansible`. Its steps run
-in this order: settings check, models, build, unit, checks, cleanup. Every
-step that can fail without touching the service comes before the service is
-restarted.
+in this order: settings check, models, image, container, checks, cleanup.
+Every step that can fail without touching the service comes before the
+container is recreated.
 
 ### Settings check
 
@@ -119,34 +123,34 @@ restarted.
 | LR-03 | `llm_models` is the catalog, and must not be empty. Each entry needs: `file`, a plain name that starts with a letter or digit, uses only letters, digits, `.`, `_` and `-`, and ends in `.gguf` (no `/`, no hidden file); `url`, starting with `https://`; `sha256`, 64 lowercase hex digits; `size`, the size in bytes as a whole number above 0. The sha256 and size come from the Hugging Face API (`https://huggingface.co/api/models/<repo>/tree/main`). |
 | LR-04 | Each entry is one single-file GGUF. Split models (`-00001-of-00002.gguf`) are rejected until the role supports them. No two entries share a `file`. Every entry is checked, not only the wanted ones, before anything on the host changes (LR-01). |
 | LR-05 | A new revision of a model gets a new catalog key and a new file name. If a wanted file is already on the host with a different sha256, the run stops and never overwrites it, because a rollback may need it. |
-| LR-06 | A catalog entry is not a promise that the model works. A model is supported only if it runs on the pinned llama.cpp (`llm_tag`) and on the hardware above: CPU only, 64 GB RAM. The checks in LR-19 to LR-21 are what prove it. |
-| LR-07 | Before any download, the free space in `llm_models_dir` must be at least the size of the missing wanted files plus `llm_disk_reserve` (5 GiB). The reserve covers Ansible's temporary download file. The old model's space is not freed first, because it stays until the new one passes its checks. If it does not fit, the run stops before the service is touched. |
+| LR-06 | A catalog entry is not a promise that the model works. A model is supported only if it runs on the pinned llama.cpp (`llm_image`) and on the hardware above: CPU only, 64 GB RAM. The checks in LR-19 to LR-21 are what prove it. |
+| LR-07 | Before any download, the free space in `llm_models_dir` must be at least the size of the missing wanted files plus `llm_disk_reserve` (5 GiB). The reserve covers Ansible's temporary download file and a new image. The old model's space is not freed first, because it stays until the new one passes its checks. If it does not fit, the run stops before the service is touched. |
 | LR-08 | Each wanted file is read once per run to check its sha256. Missing files are downloaded and checked against their sha256. A file already there with the right sum is not downloaded again. The directory is `root:llama 0750`; each file is `root:llama 0640`. |
 
-### Build
+### Image
 
 | ID | Requirement |
 |----|-------------|
-| LR-09 | Installs `llm_build_packages` and creates the system user `llama`, with no login shell and no home. |
-| LR-10 | Clones `llm_repo` at the tag `llm_tag` into `llm_src_dir`. |
-| LR-11 | Builds `llama-server` and `llama-bench` with `-DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release` on every run. The web UI is off (`-DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF`): by default llama.cpp downloads it at build time and falls back to `latest`, which GR-05 forbids. The build is incremental, so an unchanged tree is quick, and a build that failed last time is finished on the next run. It fails the run if either binary is missing afterwards. |
+| LR-09 | Creates the system user `llama`, with no login shell and no home. The container runs with its uid and gid, so the `root:llama` rights on the models and the key apply inside it too. |
+| LR-10 | `llm_image` is llama.cpp's CPU server image, pinned by digest: `ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220`, the image llama.cpp published for its `v0.8.0` tag. The tag is for people; Docker uses the digest. The image picks the best code for the host's CPU when it starts (`GGML_CPU_ALL_VARIANTS`), so nothing is built on the host. |
+| LR-11 | The image is pulled before the container is touched, so a failed pull leaves the running container as it is. The same image has `llama bench`: `sudo docker exec llama-server /app/llama bench -m /models/<file>`. |
 
-### Service
+### Container
 
 | ID | Requirement |
 |----|-------------|
 | LR-12 | The API key is 40 letters and digits, generated once in `llm_key_file` (`root:llama 0640`). Later runs never replace it, but set its owner, group and mode back if they drifted. It never appears in Ansible output. |
-| LR-13 | A systemd unit `llama-server` runs as `llama`, listens on `llm_bind:llm_port`, serves `llm_model`, and reads the key from `llm_key_file`. It uses `--jinja`, `llm_threads` threads and an `llm_ctx` context, restarts on failure, and is enabled at boot. |
-| LR-14 | The service restarts only when the build or the unit changed. Downloading an extra model does not restart it. |
-| LR-15 | "The build" is the sha256 of `llama-server`, `llama-bench` and every shared library under `build/` (outside `CMakeFiles/`); "the unit" is the sha256 of the installed unit file. Each run compares both with what the service last passed its checks with, kept in `build/activated.sha256`, not with the start of the same run, and restarts if either differs. That file is written only after every check passes (LR-19 to LR-21). So a build or a unit that was written but never activated, for example because a run failed half way, was stopped with Ctrl-C or lost the host, still gets its restart on the next run. A missing file means a restart. |
-| LR-16 | A restart that was due when a later task failed still runs in the same run (`force_handlers`). An interrupted run runs no handlers; LR-15 restarts on the next run instead. |
+| LR-13 | `llm_compose_dir/compose.yaml` defines one service, in a container named `llama-server`. It runs `llm_image` as `llama`, mounts `llm_models_dir` and `llm_key_file` read-only, and serves `llm_model` with the key, `--jinja`, `llm_threads` threads and an `llm_ctx` context. It listens on port 8080 inside the container, where the image's own health check looks, and publishes it on `llm_bind:llm_port` only. It drops every capability, sets `no-new-privileges`, and has `restart: unless-stopped`, so Docker starts it at boot. |
+| LR-14 | The container is recreated only when the compose file or the image changed. Downloading an extra model does not recreate it. |
+| LR-15 | Each run brings the service up with `docker compose`, which compares the running container with the compose file and recreates it if they differ. So a compose file that was written but never applied, for example because a run failed, was stopped with Ctrl-C or lost the host, is applied on the next run. There is no record file and no handler. |
+| LR-16 | The role removes what the source build left: it stops, disables and deletes the `llama-server` systemd unit before the container starts, so the port is free, and deletes `/opt/llama.cpp`. A host that ran the source build keeps `build-essential` and `cmake`. |
 | LR-17 | The API is plain HTTP, for the LAN only. There is no TLS. |
 
 ### Checks after every run
 
 | ID | Requirement |
 |----|-------------|
-| LR-18 | Pending restarts run before the checks, so the checks see the final process. |
+| LR-18 | The checks run after `docker compose` has brought the container up, so they see the final process. |
 | LR-19 | `/health` must answer 200 within 5 minutes (60 tries, 5 s apart). It answers 503 while the model loads. |
 | LR-20 | `/v1/models` must answer 200 with the key and 401 without one. The key is not shown in the output. |
 | LR-21 | A chat request with the key (`Say hi.`, at most 32 tokens) must answer within `llm_check_timeout` (120 s), and its reply must hold text in `content` or, for a reasoning model, in `reasoning_content`. `/health` only shows that the file loaded; this shows the model can answer. |
@@ -155,17 +159,17 @@ restarted.
 
 | ID | Requirement |
 |----|-------------|
-| LR-22 | Only after every check passes, every `.gguf` in `llm_models_dir` that is not in the wanted list is deleted. Ansible owns this directory: a file copied there by hand is deleted too. |
+| LR-22 | Only after every check passes, every `.gguf` in `llm_models_dir` that is not in the wanted list is deleted. Ansible owns this directory: a file copied there by hand is deleted too. In the same step, every `ghcr.io/ggml-org/llama.cpp` image other than `llm_image` is removed. |
 
 ### Switching models and failures
 
 | ID | Requirement |
 |----|-------------|
-| LR-23 | To switch, add the model to `llm_models` if needed, change `llm_model` in `group_vars/agent_servers.yml`, commit, and run `llm.yml`. The run downloads the new model, restarts the service, checks it, and then deletes the old model. |
+| LR-23 | To switch, add the model to `llm_models` if needed, change `llm_model` in `group_vars/agent_servers.yml`, commit, and run `llm.yml`. The run downloads the new model, recreates the container, checks it, and then deletes the old model. |
 | LR-24 | The model is changed in the file, not with `-e llm_model=...`. Otherwise the next plain run switches back and deletes the new model. |
-| LR-25 | Change `llm_tag` and `llm_model` in separate runs. Rollback (LR-27) covers a model change only. To undo a llama.cpp upgrade, set `llm_tag` back and run again; that rebuilds the old tag. |
-| LR-26 | A failure before the restart (settings check, free space, overwrite guard, download, checksum, build) leaves the service running the current model. |
-| LR-27 | A failure at or after the restart (load, `/health`, key checks, chat check) can leave the API down until rollback. The old file is still on the host, because cleanup did not run. Rollback is manual and runs through Ansible: set `llm_model` back and run `llm.yml`. That run does not download the old model again, and its cleanup deletes the failed one. Automatic rollback is not required. |
+| LR-25 | Change `llm_image` and `llm_model` in separate runs. To undo a llama.cpp upgrade, set `llm_image` back and run again. If the new image failed its checks, the old one is still on the host (LR-22), so nothing is pulled. |
+| LR-26 | A failure before the container is recreated (settings check, free space, overwrite guard, download, checksum, pull) leaves the service running the current model. |
+| LR-27 | A failure at or after the recreate (load, `/health`, key checks, chat check) can leave the API down until rollback. The old file is still on the host, because cleanup did not run. Rollback is manual and runs through Ansible: set `llm_model` back and run `llm.yml`. That run does not download the old model again, and its cleanup deletes the failed one. Automatic rollback is not required. |
 
 ## 5. Requests (`bruno/`)
 
@@ -177,8 +181,10 @@ restarted.
 
 ## Out of scope
 
-Docker, Ollama, the AI agent itself, application secrets and the firewall.
-Each will be a later role with its own requirements.
+Ollama, the AI agent itself, application secrets and the firewall. Each will
+be a later role with its own requirements. The firewall must allow for the
+rules Docker writes for published ports, which bypass the host's own input
+rules.
 
 ## Open decisions
 
@@ -189,7 +195,10 @@ Each will be a later role with its own requirements.
 | OD-03 | Delivery of the preseed | Built into the netinst ISO by `build-iso.sh`. Replaces `preseed/url`, whose network answers came too late. Closed. |
 | OD-04 | Reading the API key | `ssh -i ~/.ssh/agent-server ansible@192.168.150.221 sudo cat /etc/llama/api-key`. A read-only login, which GR-02 allows. Closed. |
 | OD-05 | Version check in `llm.yml` | Both playbooks import `check-controller.yml` (AR-02). Closed. |
-| OD-06 | Rollback after a failed switch | Manual, through Ansible (LR-27). Closed. Automatic rollback, which would restore the previous unit, restart it and check it again, may be added later. |
+| OD-06 | Rollback after a failed switch | Manual, through Ansible (LR-27). Closed. Automatic rollback, which would restore the previous compose file, recreate the container and check it again, may be added later. |
+| OD-07 | How llama.cpp runs | In Docker, from llama.cpp's published image (LR-10), instead of a source build under systemd. It drops the build, the build record and the restart handler, and `docker compose` applies an interrupted change on the next run (LR-15). Closed. |
+| OD-08 | Where Docker comes from | Debian's packages (AR-10), not Docker's apt repository: no extra signing key, and security updates come with the rest of the system. Closed. |
+| OD-09 | Container network | A port published on `llm_bind` only, not host networking, so the image's own health check on `localhost:8080` works. Closed. |
 
 ## Acceptance
 
@@ -209,24 +218,29 @@ Each will be a later role with its own requirements.
 
 ### Configure
 
-1. With `ansible-core` older than 2.18, `site.yml` and `llm.yml` each stop before they connect to the host.
+1. With `ansible-core` older than 2.18, or without `community.docker` 4.0, `site.yml` and `llm.yml` each stop before they connect to the host.
 2. First run as `devel` with `-k -K` succeeds; the second run, key only, reports 0 changed.
 3. `ssh root@host` fails; `ssh ansible@host` with the key works; with a password it fails.
 4. `passwd -S ansible` shows `L`; as `ansible`, `sudo -n true` works; as `devel`, `sudo` asks for the password.
 5. `ansible agent_servers -m ping` returns `pong`.
 6. `systemctl is-enabled apt-daily-upgrade.timer` returns `enabled`.
+7. `systemctl is-enabled docker` returns `enabled`; `docker compose version` works.
+8. `sudo docker info` shows the `journald` logging driver and `Live Restore Enabled: true`; `getent group docker` lists no members.
 
 ### Model server
 
-1. The first `llm.yml` run builds llama.cpp, downloads `llm_model`, starts the service and passes LR-19 to LR-21.
+1. The first `llm.yml` run pulls `llm_image`, downloads `llm_model`, starts the container and passes LR-19 to LR-21.
 2. A second run reports 0 changed: no download, no deletion, no restart.
-3. An unknown `llm_model`, two entries with the same `file`, or any entry that breaks LR-03 or LR-04 (for example a negative `size`, a missing `url` or `sha256`, a `file` with a `/`, or a split GGUF) fails the run before any package is installed.
-4. If the build of a new `llm_tag` fails while the old binary is still there, the next run finishes the build and restarts the service. The same holds when only `llama-bench` is missing.
-5. If a run writes a new build and then fails, at the build or at any check after the restart, the next run restarts the service again and only then updates `build/activated.sha256`.
-6. A change to a shared library alone, with both binaries unchanged, restarts the service.
+3. An unknown `llm_model`, two entries with the same `file`, or any entry that breaks LR-03 or LR-04 (for example a negative `size`, a missing `url` or `sha256`, a `file` with a `/`, or a split GGUF) fails the run before anything on the host changes.
+4. A wrong digest in `llm_image` fails the run at the pull, and the running container keeps serving.
+5. Changing only `llm_threads` recreates the container; adding a model to `llm_download` only does not.
+6. On a host that ran the source build, the first run removes the `llama-server` unit and `/opt/llama.cpp`, and the container serves the same model without downloading it again.
 7. A `.gguf` copied into `llm_models_dir` by hand is gone after the next run.
 8. All four Bruno requests pass their status checks against the running server.
 9. With `llm_key_file` set to `root:root 0600` by hand, the next run sets it back to `root:llama 0640`, and the key is unchanged.
+10. After a reboot, the container is back and passes LR-19 to LR-21 without a playbook run.
+11. After a successful change of `llm_image`, `sudo docker image ls ghcr.io/ggml-org/llama.cpp` lists only the new image. After a failed one, it lists both.
+12. `sudo docker exec llama-server /app/llama bench -m /models/<llm_model's file>` prints a benchmark table.
 
 ### Switching models
 
@@ -240,4 +254,4 @@ All of these start from `qwen3-8b` running and `llm_download` empty.
 6. A new model that passes `/health` but returns an empty reply, or no reply within the timeout, fails the run. The Qwen file is still there.
 7. A new model that cannot load fails the run at `/health`, and the Qwen file is still there. Setting `llm_model` back and running again restores Qwen without a download, passes all checks, and deletes the failed file.
 8. A second run after a successful switch reports 0 changed: no download, no deletion, no restart.
-9. A switch stopped with Ctrl-C after the unit is written and before the restart: the next run restarts the service, checks DeepSeek, and only then deletes the Qwen file.
+9. A switch stopped with Ctrl-C after the compose file is written and before the container is recreated: the next run recreates it, checks DeepSeek, and only then deletes the Qwen file.
