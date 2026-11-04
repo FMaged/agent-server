@@ -53,9 +53,18 @@ A second run changes nothing.
 ## Model server
 
 After `site.yml`, `llm.yml` builds llama.cpp at the tag in `llm_tag`, downloads
-the models in `llm_download` (checked against their sha256) and starts
-`llama-server` on `llm_bind:llm_port`. The model it serves is `llm_model`; all
-are set in `group_vars/agent_servers.yml`.
+`llm_model` and any extras in `llm_download` (checked against their sha256) and
+starts `llama-server` on `llm_bind:llm_port`, serving `llm_model`. All are set
+in `group_vars/agent_servers.yml`.
+
+To switch models, set `llm_model` to another key of `llm_models` and run
+`llm.yml` again. It checks the new model fits on the disk, downloads it,
+restarts the service, and waits until the model answers a chat request. Only
+then does it delete every `.gguf` that is not `llm_model` or in `llm_download`.
+If the download fails, the old model keeps serving. If the new model fails
+after the restart, the API is down but the old file is still there: set
+`llm_model` back and run again. Change `llm_tag` and `llm_model` in separate
+runs. `REQUIREMENTS.md` lists every failure case.
 
 ```
 ansible-playbook llm.yml

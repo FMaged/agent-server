@@ -22,26 +22,46 @@ llm_bind: 192.168.150.221
 llm_port: 8080
 llm_threads: 2
 llm_ctx: 16384
+# Kept free on the models' filesystem after every download, in bytes (5 GiB).
+llm_disk_reserve: 5368709120
+# Seconds the chat check may take; CPU generation is slow.
+llm_check_timeout: 120
 llm_build_packages:
   - build-essential
   - cmake
   - git
 
-# Weights are never committed; each is pinned by sha256.
+# Weights are never committed. Each entry is one GGUF file (no split models),
+# pinned by sha256; size is its size in bytes, for the free-space check. A new
+# revision of a model gets a new key and a new file name, so it never
+# overwrites the file a rollback needs. Sizes and sums come from the Hugging
+# Face API: https://huggingface.co/api/models/<repo>/tree/main
 llm_models:
   qwen3-coder-30b-a3b:
     file: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
     url: https://huggingface.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/resolve/main/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
     sha256: fadc3e5f8d42bf7e894a785b05082e47daee4df26680389817e2093056f088ad
+    size: 18556689568
   qwen3-8b:
     file: Qwen3-8B-Q4_K_M.gguf
     url: https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf
     sha256: 120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4
+    size: 5027784512
   qwen3-0.6b:
     file: Qwen3-0.6B-Q4_K_M.gguf
     url: https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf
     sha256: ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a
+    size: 396705472
+  deepseek-r1-distill-qwen-7b:
+    file: DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf
+    url: https://huggingface.co/unsloth/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf
+    sha256: 78272d8d32084548bd450394a560eb2d70de8232ab96a725769b1f9171235c1c
+    size: 4683073248
 
-# The model the service runs; a key of llm_models. llm_download lists extra models to cache; llm_model is always fetched too.
+# The model the service runs; a key of llm_models. To switch, change this line
+# and run llm.yml: it downloads the new model, restarts the service, checks it
+# answers a chat request, then deletes every .gguf that is neither llm_model nor
+# in llm_download. Change llm_tag and llm_model in separate runs.
 llm_model: qwen3-8b
-llm_download: [qwen3-8b]
+# Extra models to keep on the host besides llm_model.
+llm_download: []

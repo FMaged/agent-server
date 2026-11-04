@@ -4,5 +4,8 @@
 
 - name: Serve a model with llama.cpp
   hosts: agent_servers
+  # A restart notified before a later task fails still runs. Without it, a
+  # changed unit would not be restarted: the next run sees it unchanged.
+  force_handlers: true
   roles:
     - llm

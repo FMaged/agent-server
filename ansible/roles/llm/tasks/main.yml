@@ -1,11 +1,40 @@
 ---
-- name: Check the selected model before changing the host
+- name: Check the model settings before changing the host
   ansible.builtin.assert:
     that:
+      - llm_models is mapping and llm_models | length > 0
       - llm_model in llm_models
-      - llm_download | difference(llm_models.keys() | list) | length == 0
-    fail_msg: "llm_model and llm_download must be keys of llm_models: {{ llm_models.keys() | list }}"
+      - llm_wanted | difference(llm_models.keys() | list) | length == 0
+      - llm_models.values() | map(attribute='file') | unique | list | length == llm_models | length
+    fail_msg: >-
+      llm_model and llm_download must be keys of llm_models
+      ({{ llm_models.keys() | list | join(', ') }}), and no two entries may
+      share a file name.
     quiet: true
+
+# Every entry, not only the wanted ones, so a bad entry fails on the day it is
+# added. Nothing on the host has changed yet.
+- name: Check every catalog entry
+  ansible.builtin.assert:
+    that:
+      - item.value is mapping
+      - (item.value.file | default('')) is string
+      - (item.value.file | default('')) is match('^[A-Za-z0-9][A-Za-z0-9._-]*[.]gguf$')
+      - (item.value.file | default('')) is not search('-[0-9]{5}-of-[0-9]{5}[.]gguf$')
+      - (item.value.url | default('')) is string
+      - (item.value.url | default('')) is match('^https://[^ ]+$')
+      - (item.value.sha256 | default('')) is string
+      - (item.value.sha256 | default('')) is match('^[0-9a-f]{64}$')
+      - (item.value.size | default(0)) is integer
+      - (item.value.size | default(0)) > 0
+    fail_msg: >-
+      llm_models.{{ item.key }} is invalid. It needs file (a plain *.gguf name,
+      not a split model), url (https://), sha256 (64 lowercase hex digits) and
+      size (bytes, a whole number above 0).
+    quiet: true
+  loop: "{{ llm_models | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
 
 - name: Install the build packages
   ansible.builtin.apt:
@@ -20,6 +49,74 @@
     shell: /usr/sbin/nologin
     create_home: false
 
+- name: Create the models directory
+  ansible.builtin.file:
+    path: "{{ llm_models_dir }}"
+    state: directory
+    owner: root
+    group: llama
+    mode: "0750"
+
+# One sha256 read per file, reused below. A file there with other weights is a
+# catalog mistake: overwriting it would destroy what a rollback needs.
+- name: Check the model files already on the host
+  ansible.builtin.stat:
+    path: "{{ llm_models_dir }}/{{ llm_models[item].file }}"
+    checksum_algorithm: sha256
+  loop: "{{ llm_wanted }}"
+  register: llm_files
+
+- name: Refuse to overwrite a model file that holds other weights
+  ansible.builtin.assert:
+    that: not item.stat.exists or item.stat.checksum == llm_models[item.item].sha256
+    fail_msg: >-
+      {{ llm_models[item.item].file }} is on the host with a different sha256.
+      Give the new revision its own key and file name in llm_models.
+    quiet: true
+  loop: "{{ llm_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Read the free space for the models
+  ansible.builtin.command: df --output=avail -B1 {{ llm_models_dir }}
+  register: llm_df
+  changed_when: false
+  check_mode: false
+
+# The old model stays until the new one passes its checks, so both must fit.
+- name: Check the new models fit on the disk
+  ansible.builtin.assert:
+    that: llm_need | int + llm_disk_reserve | int <= llm_free | int
+    fail_msg: >-
+      The download needs {{ llm_need | int | human_readable }} plus a
+      {{ llm_disk_reserve | int | human_readable }} reserve, but only
+      {{ llm_free | int | human_readable }} is free in {{ llm_models_dir }}.
+    quiet: true
+  vars:
+    llm_missing: "{{ llm_files.results | rejectattr('stat.exists') | map(attribute='item') | list }}"
+    llm_need: "{{ llm_missing | map('extract', llm_models, 'size') | sum }}"
+    llm_free: "{{ llm_df.stdout_lines[-1] | trim }}"
+
+# Only missing files are fetched; the unit change, not the download, restarts
+# the service, so adding an extra model does not interrupt it.
+- name: Download the models
+  ansible.builtin.get_url:
+    url: "{{ llm_models[item].url }}"
+    dest: "{{ llm_models_dir }}/{{ llm_models[item].file }}"
+    checksum: "sha256:{{ llm_models[item].sha256 }}"
+    owner: root
+    group: llama
+    mode: "0640"
+  loop: "{{ llm_files.results | rejectattr('stat.exists') | map(attribute='item') | list }}"
+
+- name: Set the model file rights
+  ansible.builtin.file:
+    path: "{{ llm_models_dir }}/{{ llm_models[item].file }}"
+    owner: root
+    group: llama
+    mode: "0640"
+  loop: "{{ llm_wanted }}"
+
 - name: Clone llama.cpp at the tag
   ansible.builtin.git:
     repo: "{{ llm_repo }}"
@@ -29,41 +126,46 @@
   register: llm_clone
 
 # Always run: cmake is incremental, so an unchanged tree is a quick no-op, and a
-# build that failed last time is finished now. Restart only if a binary changed.
+# build that failed last time is finished now.
 - name: Build llama-server and llama-bench
   ansible.builtin.shell: |
     set -e
-    before=$(sha256sum build/bin/llama-server build/bin/llama-bench 2>/dev/null || true)
     cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release
     cmake --build build --target llama-server llama-bench -j"$(nproc)"
     test -x build/bin/llama-server
     test -x build/bin/llama-bench
-    after=$(sha256sum build/bin/llama-server build/bin/llama-bench)
-    [ "$before" = "$after" ] || echo rebuilt
   args:
     chdir: "{{ llm_src_dir }}"
     executable: /bin/bash
-  register: llm_build
-  changed_when: "'rebuilt' in llm_build.stdout"
-  notify: Restart llama-server
+  changed_when: false
 
-- name: Create the models directory
-  ansible.builtin.file:
-    path: "{{ llm_models_dir }}"
-    state: directory
-    owner: root
-    group: llama
-    mode: "0750"
+# The binaries and every shared library they may load. Compared with the build
+# the service last passed its checks with, not with the start of this run, so
+# a build that was written but never activated still gets its restart.
+- name: Hash the build
+  ansible.builtin.shell: |
+    set -euo pipefail
+    { printf '%s\n' bin/llama-server bin/llama-bench
+      find . -type f -name '*.so*' -not -path '*/CMakeFiles/*' -printf '%P\n'
+    } | sort | xargs -d '\n' sha256sum
+  args:
+    chdir: "{{ llm_src_dir }}/build"
+    executable: /bin/bash
+  register: llm_hashes
+  changed_when: false
+  check_mode: false
 
-- name: Download the models
-  ansible.builtin.get_url:
-    url: "{{ llm_models[item].url }}"
-    dest: "{{ llm_models_dir }}/{{ llm_models[item].file }}"
-    checksum: "sha256:{{ llm_models[item].sha256 }}"
-    owner: root
-    group: llama
-    mode: "0640"
-  loop: "{{ (llm_download + [llm_model]) | unique }}"
+- name: Read the build the service last passed its checks with
+  ansible.builtin.slurp:
+    src: "{{ llm_build_stamp }}"
+  register: llm_stamp
+  failed_when: false
+
+- name: Restart for a build the service has not run yet
+  ansible.builtin.debug:
+    msg: The build differs from the one the service last passed its checks with.
+  when: llm_hashes.stdout | trim != (llm_stamp.content | default('') | b64decode | trim)
+  changed_when: true
   notify: Restart llama-server
 
 - name: Create the key directory
@@ -131,3 +233,57 @@
   ansible.builtin.uri:
     url: "http://{{ llm_bind }}:{{ llm_port }}/v1/models"
     status_code: 401
+
+# /health only means the file loaded. This proves the model can answer before
+# the old one is deleted. A reasoning model may fill only reasoning_content.
+- name: Check the model answers a chat request
+  ansible.builtin.uri:
+    url: "http://{{ llm_bind }}:{{ llm_port }}/v1/chat/completions"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ (llm_key.content | b64decode) | trim }}"
+    body_format: json
+    body:
+      messages: [{role: user, content: Say hi.}]
+      max_tokens: 32
+    timeout: "{{ llm_check_timeout }}"
+  register: llm_chat
+  no_log: true
+
+- name: Check the reply is not empty
+  ansible.builtin.assert:
+    that: >-
+      (llm_reply.content | default('', true) | trim | length > 0) or
+      (llm_reply.reasoning_content | default('', true) | trim | length > 0)
+    fail_msg: "{{ llm_model }} answered the chat request with no text."
+    quiet: true
+  vars:
+    llm_reply: "{{ (llm_chat.json.choices | default([{}], true))[0].message | default({}) }}"
+
+# Written only now, after the restarted service passed every check.
+- name: Record the build the service now runs
+  ansible.builtin.copy:
+    content: "{{ llm_hashes.stdout | trim }}\n"
+    dest: "{{ llm_build_stamp }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# Ansible owns this directory: a .gguf not in llm_wanted is removed. This runs
+# last, so a new model that fails any check leaves the old file for a rollback.
+- name: Find the model files on the host
+  ansible.builtin.find:
+    paths: "{{ llm_models_dir }}"
+    patterns: "*.gguf"
+  register: llm_present
+
+- name: Remove the models that are no longer wanted
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ llm_present.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: item.path | basename not in wanted_files
+  vars:
+    wanted_files: "{{ llm_wanted | map('extract', llm_models, 'file') | list }}"
