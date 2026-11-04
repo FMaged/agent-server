@@ -4,8 +4,8 @@
 
 - name: Serve a model with llama.cpp
   hosts: agent_servers
-  # A restart notified before a later task fails still runs. Without it, a
-  # changed unit would not be restarted: the next run sees it unchanged.
+  # A restart notified before a later task fails still runs in this run. An
+  # interrupted run runs no handlers; build/activated.sha256 covers that.
   force_handlers: true
   roles:
     - llm

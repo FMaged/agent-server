@@ -138,8 +138,8 @@ restarted.
 | LR-12 | The API key is 40 letters and digits, generated once in `llm_key_file` (`root:llama 0640`). Later runs never replace it. It never appears in Ansible output. |
 | LR-13 | A systemd unit `llama-server` runs as `llama`, listens on `llm_bind:llm_port`, serves `llm_model`, and reads the key from `llm_key_file`. It uses `--jinja`, `llm_threads` threads and an `llm_ctx` context, restarts on failure, and is enabled at boot. |
 | LR-14 | The service restarts only when the build or the unit changed. Downloading an extra model does not restart it. |
-| LR-15 | "The build" is the sha256 of `llama-server`, `llama-bench` and every shared library under `build/` (outside `CMakeFiles/`). Each run compares it with the build the service last passed its checks with, kept in `build/activated.sha256`, not with the start of the same run. That file is written only after every check passes (LR-19 to LR-21). So a build that was written but never activated, for example because a run failed half way, still gets its restart on the next run. A missing file means a restart. |
-| LR-16 | A restart that was due when a later task failed still runs (`force_handlers`). Without it, a changed unit would never be restarted, because the next run sees the unit unchanged. |
+| LR-15 | "The build" is the sha256 of `llama-server`, `llama-bench` and every shared library under `build/` (outside `CMakeFiles/`); "the unit" is the sha256 of the installed unit file. Each run compares both with what the service last passed its checks with, kept in `build/activated.sha256`, not with the start of the same run, and restarts if either differs. That file is written only after every check passes (LR-19 to LR-21). So a build or a unit that was written but never activated, for example because a run failed half way, was stopped with Ctrl-C or lost the host, still gets its restart on the next run. A missing file means a restart. |
+| LR-16 | A restart that was due when a later task failed still runs in the same run (`force_handlers`). An interrupted run runs no handlers; LR-15 restarts on the next run instead. |
 | LR-17 | The API is plain HTTP, for the LAN only. There is no TLS. |
 
 ### Checks after every run
@@ -239,3 +239,4 @@ All of these start from `qwen3-8b` running and `llm_download` empty.
 6. A new model that passes `/health` but returns an empty reply, or no reply within the timeout, fails the run. The Qwen file is still there.
 7. A new model that cannot load fails the run at `/health`, and the Qwen file is still there. Setting `llm_model` back and running again restores Qwen without a download, passes all checks, and deletes the failed file.
 8. A second run after a successful switch reports 0 changed: no download, no deletion, no restart.
+9. A switch stopped with Ctrl-C after the unit is written and before the restart: the next run restarts the service, checks DeepSeek, and only then deletes the Qwen file.

@@ -139,35 +139,6 @@
     executable: /bin/bash
   changed_when: false
 
-# The binaries and every shared library they may load. Compared with the build
-# the service last passed its checks with, not with the start of this run, so
-# a build that was written but never activated still gets its restart.
-- name: Hash the build
-  ansible.builtin.shell: |
-    set -euo pipefail
-    { printf '%s\n' bin/llama-server bin/llama-bench
-      find . -type f -name '*.so*' -not -path '*/CMakeFiles/*' -printf '%P\n'
-    } | sort | xargs -d '\n' sha256sum
-  args:
-    chdir: "{{ llm_src_dir }}/build"
-    executable: /bin/bash
-  register: llm_hashes
-  changed_when: false
-  check_mode: false
-
-- name: Read the build the service last passed its checks with
-  ansible.builtin.slurp:
-    src: "{{ llm_build_stamp }}"
-  register: llm_stamp
-  failed_when: false
-
-- name: Restart for a build the service has not run yet
-  ansible.builtin.debug:
-    msg: The build differs from the one the service last passed its checks with.
-  when: llm_hashes.stdout | trim != (llm_stamp.content | default('') | b64decode | trim)
-  changed_when: true
-  notify: Restart llama-server
-
 - name: Create the key directory
   ansible.builtin.file:
     path: "{{ llm_key_file | dirname }}"
@@ -190,10 +161,40 @@
 - name: Install the llama-server unit
   ansible.builtin.template:
     src: llama-server.service.j2
-    dest: /etc/systemd/system/llama-server.service
+    dest: "{{ llm_unit_file }}"
     owner: root
     group: root
     mode: "0644"
+
+# The binaries, every shared library they may load, and the unit. The restart
+# comes from comparing these with what the service last passed its checks with,
+# not from a notify on the unit, so a run that stopped before its restart
+# (failed, interrupted or disconnected) leaves the next run to restart.
+- name: Hash the build and the unit
+  ansible.builtin.shell: |
+    set -euo pipefail
+    { printf '%s\n' bin/llama-server bin/llama-bench
+      find . -type f -name '*.so*' -not -path '*/CMakeFiles/*' -printf '%P\n'
+    } | sort | xargs -d '\n' sha256sum
+    sha256sum {{ llm_unit_file }}
+  args:
+    chdir: "{{ llm_src_dir }}/build"
+    executable: /bin/bash
+  register: llm_hashes
+  changed_when: false
+  check_mode: false
+
+- name: Read what the service last passed its checks with
+  ansible.builtin.slurp:
+    src: "{{ llm_build_stamp }}"
+  register: llm_stamp
+  failed_when: false
+
+- name: Restart for a build or unit the service has not run yet
+  ansible.builtin.debug:
+    msg: The build or the unit differs from what the service last passed its checks with.
+  when: llm_hashes.stdout | trim != (llm_stamp.content | default('') | b64decode | trim)
+  changed_when: true
   notify: Restart llama-server
 
 - name: Enable and start llama-server
@@ -261,7 +262,7 @@
     llm_reply: "{{ (llm_chat.json.choices | default([{}], true))[0].message | default({}) }}"
 
 # Written only now, after the restarted service passed every check.
-- name: Record the build the service now runs
+- name: Record the build and the unit the service now runs
   ansible.builtin.copy:
     content: "{{ llm_hashes.stdout | trim }}\n"
     dest: "{{ llm_build_stamp }}"

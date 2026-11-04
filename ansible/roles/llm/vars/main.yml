@@ -1,6 +1,7 @@
 ---
 # The models kept on the host: the served one plus any extras.
 llm_wanted: "{{ ([llm_model] + llm_download) | unique }}"
-# Hashes of the build the service last passed its checks with. Inside build/,
-# so a deleted build directory also means a restart.
+# Hashes of the build and the unit the service last passed its checks with.
+# Inside build/, so a deleted build directory also means a restart.
 llm_build_stamp: "{{ llm_src_dir }}/build/activated.sha256"
+llm_unit_file: /etc/systemd/system/llama-server.service
