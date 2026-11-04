@@ -135,7 +135,7 @@ restarted.
 
 | ID | Requirement |
 |----|-------------|
-| LR-12 | The API key is 40 letters and digits, generated once in `llm_key_file` (`root:llama 0640`). Later runs never replace it. It never appears in Ansible output. |
+| LR-12 | The API key is 40 letters and digits, generated once in `llm_key_file` (`root:llama 0640`). Later runs never replace it, but set its owner, group and mode back if they drifted. It never appears in Ansible output. |
 | LR-13 | A systemd unit `llama-server` runs as `llama`, listens on `llm_bind:llm_port`, serves `llm_model`, and reads the key from `llm_key_file`. It uses `--jinja`, `llm_threads` threads and an `llm_ctx` context, restarts on failure, and is enabled at boot. |
 | LR-14 | The service restarts only when the build or the unit changed. Downloading an extra model does not restart it. |
 | LR-15 | "The build" is the sha256 of `llama-server`, `llama-bench` and every shared library under `build/` (outside `CMakeFiles/`); "the unit" is the sha256 of the installed unit file. Each run compares both with what the service last passed its checks with, kept in `build/activated.sha256`, not with the start of the same run, and restarts if either differs. That file is written only after every check passes (LR-19 to LR-21). So a build or a unit that was written but never activated, for example because a run failed half way, was stopped with Ctrl-C or lost the host, still gets its restart on the next run. A missing file means a restart. |
@@ -226,6 +226,7 @@ Each will be a later role with its own requirements.
 6. A change to a shared library alone, with both binaries unchanged, restarts the service.
 7. A `.gguf` copied into `llm_models_dir` by hand is gone after the next run.
 8. All four Bruno requests pass their status checks against the running server.
+9. With `llm_key_file` set to `root:root 0600` by hand, the next run sets it back to `root:llama 0640`, and the key is unchanged.
 
 ### Switching models
 

@@ -158,6 +158,14 @@
     force: false
   no_log: true
 
+# The copy above skips an existing key entirely, its rights too.
+- name: Set the API key rights
+  ansible.builtin.file:
+    path: "{{ llm_key_file }}"
+    owner: root
+    group: llama
+    mode: "0640"
+
 - name: Install the llama-server unit
   ansible.builtin.template:
     src: llama-server.service.j2
