@@ -1,5 +1,7 @@
 ---
 # Run after site.yml.
+- import_playbook: check-controller.yml
+
 - name: Serve a model with llama.cpp
   hosts: agent_servers
   roles:

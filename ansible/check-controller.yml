@@ -1,0 +1,13 @@
+---
+# Imported first by site.yml and llm.yml, so an old controller stops before
+# any host is touched.
+- name: Check the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Require ansible-core 2.18 or later
+      ansible.builtin.assert:
+        that: ansible_version.full is version('2.18', '>=')
+        fail_msg: "ansible-core 2.18 or later is needed for Python 3.13 on Debian 13"
+        quiet: true
