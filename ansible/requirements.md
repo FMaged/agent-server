@@ -8,7 +8,7 @@ The host arrives with one `devel` user and its password, `sudo`,
 
 | ID | Requirement |
 |----|-------------|
-| AR-01 | First run connects as `devel` with its password: `ansible-playbook site.yml -k -K -e ansible_user=devel`. Later runs connect as `ansible`. Needs `sshpass` and `ansible-core` 2.14 or later on the controller. |
+| AR-01 | First run connects as `devel` with its password: `ansible-playbook site.yml -k -K -e ansible_user=devel`. Later runs connect as `ansible`. Needs `sshpass` and `ansible-core` 2.18 or later on the controller. |
 | AR-02 | `users` role: creates `ansible` with no password, and writes the `authorized_keys` of `ansible` and `devel` from `agent_ssh_public_keys`, whole, so a dropped key is removed. |
 | AR-03 | `users` role: passwordless sudo in `/etc/sudoers.d/ansible`, validated with `visudo -cf`. `devel` keeps Debian's `%sudo` rule, which asks for its password. |
 | AR-04 | `users` role: never sets or changes a password. `devel`'s comes from the install. |

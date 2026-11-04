@@ -42,6 +42,6 @@ llm_models:
     url: https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf
     sha256: ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a
 
-# The model the service runs; a key of llm_models. Models in llm_download are fetched.
+# The model the service runs; a key of llm_models. llm_download lists extra models to cache; llm_model is always fetched too.
 llm_model: qwen3-8b
 llm_download: [qwen3-8b]

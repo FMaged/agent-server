@@ -1,4 +1,16 @@
 ---
+# Runs before any host is touched, so an old controller fails early.
+- name: Check the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Require ansible-core 2.18 or later
+      ansible.builtin.assert:
+        that: ansible_version.full is version('2.18', '>=')
+        fail_msg: "ansible-core 2.18 or later is needed for Python 3.13 on Debian 13"
+        quiet: true
+
 # users comes first: ansible needs its key and sudo before ssh turns passwords off.
 - name: Configure agent-server
   hosts: agent_servers

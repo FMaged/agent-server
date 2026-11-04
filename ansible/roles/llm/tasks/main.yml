@@ -1,4 +1,12 @@
 ---
+- name: Check the selected model before changing the host
+  ansible.builtin.assert:
+    that:
+      - llm_model in llm_models
+      - llm_download | difference(llm_models.keys() | list) | length == 0
+    fail_msg: "llm_model and llm_download must be keys of llm_models: {{ llm_models.keys() | list }}"
+    quiet: true
+
 - name: Install the build packages
   ansible.builtin.apt:
     name: "{{ llm_build_packages }}"
@@ -20,19 +28,23 @@
     depth: 1
   register: llm_clone
 
-- name: Check for the built server
-  ansible.builtin.stat:
-    path: "{{ llm_src_dir }}/build/bin/llama-server"
-  register: llm_server
-
+# Always run: cmake is incremental, so an unchanged tree is a quick no-op, and a
+# build that failed last time is finished now. Restart only if a binary changed.
 - name: Build llama-server and llama-bench
   ansible.builtin.shell: |
+    set -e
+    before=$(sha256sum build/bin/llama-server build/bin/llama-bench 2>/dev/null || true)
     cmake -B build -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release
     cmake --build build --target llama-server llama-bench -j"$(nproc)"
+    test -x build/bin/llama-server
+    test -x build/bin/llama-bench
+    after=$(sha256sum build/bin/llama-server build/bin/llama-bench)
+    [ "$before" = "$after" ] || echo rebuilt
   args:
     chdir: "{{ llm_src_dir }}"
-  when: llm_clone.changed or not llm_server.stat.exists
-  changed_when: true
+    executable: /bin/bash
+  register: llm_build
+  changed_when: "'rebuilt' in llm_build.stdout"
   notify: Restart llama-server
 
 - name: Create the models directory
@@ -51,7 +63,7 @@
     owner: root
     group: llama
     mode: "0640"
-  loop: "{{ llm_download }}"
+  loop: "{{ (llm_download + [llm_model]) | unique }}"
   notify: Restart llama-server
 
 - name: Create the key directory
@@ -88,3 +100,34 @@
     enabled: true
     state: started
     daemon_reload: true
+
+# Run a pending restart now, so the checks below see the final process.
+- name: Apply pending restarts
+  ansible.builtin.meta: flush_handlers
+
+# /health answers 503 while the model loads; CPU loading can take minutes.
+- name: Wait for the model to load
+  ansible.builtin.uri:
+    url: "http://{{ llm_bind }}:{{ llm_port }}/health"
+  register: llm_health
+  until: llm_health.status == 200
+  retries: 60
+  delay: 5
+
+- name: Read the API key
+  ansible.builtin.slurp:
+    src: "{{ llm_key_file }}"
+  register: llm_key
+  no_log: true
+
+- name: Check the API accepts the key
+  ansible.builtin.uri:
+    url: "http://{{ llm_bind }}:{{ llm_port }}/v1/models"
+    headers:
+      Authorization: "Bearer {{ (llm_key.content | b64decode) | trim }}"
+  no_log: true
+
+- name: Check the API rejects a request without a key
+  ansible.builtin.uri:
+    url: "http://{{ llm_bind }}:{{ llm_port }}/v1/models"
+    status_code: 401

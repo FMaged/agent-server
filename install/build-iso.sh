@@ -6,6 +6,9 @@ iso=${1:?usage: build-iso.sh <debian-13-amd64-netinst.iso>}
 here=$(cd "$(dirname "$0")" && pwd)
 out=$here/build/agent-server.iso
 
+# The ISO holds the password hash: nothing here may be readable by others.
+umask 077
+
 for tool in xorriso cpio gzip openssl; do
     command -v "$tool" >/dev/null || { echo "missing: $tool" >&2; exit 1; }
 done
@@ -46,10 +49,15 @@ for f in install.amd/initrd.gz boot/grub/grub.cfg; do
 done
 
 mkdir -p "$here/build"
-rm -f "$out"
-xorriso -indev "$iso" -outdev "$out" -report_about FAILURE \
+chmod 700 "$here/build"
+tmp=$(mktemp "$here/build/.agent-server.XXXXXX")
+trap 'chmod -R u+w "$work"; rm -rf "$work"; rm -f "$tmp"' EXIT
+rm -f "$tmp"
+xorriso -indev "$iso" -outdev "$tmp" -report_about FAILURE \
     -map "$work/initrd.gz" /install.amd/initrd.gz \
     -map "$work/grub.cfg" /boot/grub/grub.cfg \
     -map "$work/md5sum.txt" /md5sum.txt \
     -boot_image any replay
+chmod 600 "$tmp"
+mv -f "$tmp" "$out"
 echo "$out"

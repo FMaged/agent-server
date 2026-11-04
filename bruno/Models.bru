@@ -13,3 +13,7 @@ get {
 auth:bearer {
   token: {{apiKey}}
 }
+
+assert {
+  res.status: eq 200
+}

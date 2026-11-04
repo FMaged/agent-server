@@ -9,7 +9,7 @@ install, then an Ansible run that configures the base system.
 - The Debian 13 amd64 netinst image and its `SHA256SUMS`, a USB stick, and a
   machine whose firmware boots it in UEFI mode
 - `xorriso`, `cpio`, `gzip` and `openssl`, to build the ISO
-- Ansible; `ansible-core` 2.14 or later is enough
+- Ansible; `ansible-core` 2.18 or later (Debian 13 has Python 3.13)
 - `sshpass` on the controller, for the first run's `-k`
 - The private key at `~/.ssh/agent-server`
 
